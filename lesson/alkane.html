@@ -5,6 +5,7 @@
 <title>Lesson</title>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.10.0/dist/ethers.umd.min.js"></script>
+<script src="../sessionService.js"></script>
 <style>
 body { margin:0; font-family:Arial; }
 
@@ -182,8 +183,9 @@ async function loadUsername(){
     username = snap.data().name || "User";
   }
 }
-const uid = localStorage.getItem("uid") || localStorage.getItem("wallet");
-const wallet = localStorage.getItem("wallet") || "guest";
+const identity = window.sessionService.getCurrentIdentity();
+const uid = identity.uid || identity.wallet || "guest";
+const wallet = identity.wallet || "guest";
 const progressKey = "progress_" + lessonId + "_" + uid;
 const bestKey = "best_" + lessonId + "_" + uid;
   // 🔥 MIGRATE OLD DATA (wallet → uid)
