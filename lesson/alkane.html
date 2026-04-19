@@ -5,6 +5,7 @@
 <title>Lesson</title>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.10.0/dist/ethers.umd.min.js"></script>
+<script src="../sessionService.js"></script>
 <style>
 body { margin:0; font-family:Arial; }
 
@@ -182,20 +183,21 @@ async function loadUsername(){
     username = snap.data().name || "User";
   }
 }
-const uid = localStorage.getItem("uid") || localStorage.getItem("wallet");
-const wallet = localStorage.getItem("wallet") || "guest";
-const progressKey = "progress_" + lessonId + "_" + uid;
-const bestKey = "best_" + lessonId + "_" + uid;
+const identity = window.sessionService.getCurrentIdentity();
+const uid = identity.uid || identity.wallet || "guest";
+const wallet = identity.wallet || "guest";
+const progressKey = window.sessionService.buildScopedKey("progress", lessonId, uid);
+const bestKey = window.sessionService.buildScopedKey("best", lessonId, uid);
   // 🔥 MIGRATE OLD DATA (wallet → uid)
-const oldProgressKey = "progress_" + lessonId + "_" + wallet;
-const newProgressKey = "progress_" + lessonId + "_" + uid;
+const oldProgressKey = window.sessionService.buildScopedKey("progress", lessonId, wallet);
+const newProgressKey = window.sessionService.buildScopedKey("progress", lessonId, uid);
 
 if(localStorage.getItem(oldProgressKey) && !localStorage.getItem(newProgressKey)){
   localStorage.setItem(newProgressKey, localStorage.getItem(oldProgressKey));
 }
 
-const oldBestKey = "best_" + lessonId + "_" + wallet;
-const newBestKey = "best_" + lessonId + "_" + uid;
+const oldBestKey = window.sessionService.buildScopedKey("best", lessonId, wallet);
+const newBestKey = window.sessionService.buildScopedKey("best", lessonId, uid);
 
 if(localStorage.getItem(oldBestKey) && !localStorage.getItem(newBestKey)){
   localStorage.setItem(newBestKey, localStorage.getItem(oldBestKey));
