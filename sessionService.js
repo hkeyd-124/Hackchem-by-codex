@@ -24,20 +24,19 @@
     };
   }
 
-  function getStorageUserId() {
-    const { uid, wallet } = getCurrentIdentity();
-    return uid || wallet || null;
-  }
+function getStorageUserId() {
+  const { uid, wallet } = getCurrentIdentity();
+  return uid || wallet || null;
+}
 
-  function getStorageUserIdOrGuest() {
-    return getStorageUserId() || "guest";
-  }
+function getStorageUserIdOrGuest() {
+  return getStorageUserId() || "guest";
+}
 
-  function buildScopedKey(prefix, entityId, scopedUserId) {
-    const userId = scopedUserId || getStorageUserIdOrGuest();
-    return `${prefix}_${entityId}_${userId}`;
-  }
-
+function buildScopedKey(prefix, entityId, scopedUserId) {
+  const userId = scopedUserId || getStorageUserIdOrGuest();
+  return `${prefix}_${entityId}_${userId}`;
+}
   function setCurrentUid(uid) {
     const value = normalize(uid);
     if (!value) return;
@@ -50,26 +49,33 @@
     localStorage.setItem("wallet", value);
   }
 
-  function clearSession() {
-    localStorage.removeItem("uid");
-    localStorage.removeItem("wallet");
-    localStorage.removeItem("username");
-  }
+function clearSession() {
+  localStorage.removeItem("uid");
+  localStorage.removeItem("wallet");
+  localStorage.removeItem("username");
+}
 
-  function clearUid() {
-    localStorage.removeItem("uid");
-  }
+function clearUid() {
+  localStorage.removeItem("uid");
+}
+global.sessionService = {
+  getUid,
+  getWallet,
+  getCurrentIdentity,
 
-  global.sessionService = {
-    getUid,
-    getWallet,
-    getCurrentIdentity,
-    getStorageUserId,
-    getStorageUserIdOrGuest,
-    buildScopedKey,
-    setCurrentUid,
-    setCurrentWallet,
-    clearUid,
+  // 🔥 Phase 1.1
+  getStorageUserId,
+  getStorageUserIdOrGuest,
+  buildScopedKey,
+
+  // setters
+  setCurrentUid,
+  setCurrentWallet,
+
+  // clear
+  clearUid,
+  clearSession
+};
     clearSession
   };
 })(window);
