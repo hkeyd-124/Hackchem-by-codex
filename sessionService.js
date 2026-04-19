@@ -76,6 +76,4 @@ global.sessionService = {
   clearUid,
   clearSession
 };
-    clearSession
-  };
 })(window);
