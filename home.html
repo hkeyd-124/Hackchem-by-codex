@@ -1360,8 +1360,8 @@ if(emailBtn){
 }
 }
 }
- 
-const uid = window.sessionService.getStorageUserId();
+ window.handleCheckin = async function(){
+const userId = window.sessionService.getStorageUserId();
   const ref = doc(db,"users",uid)
   const snap = await getDoc(ref)
 
@@ -1443,7 +1443,7 @@ fileInput.onchange=async(e)=>{
     // 🔥 nén ảnh (0.7 = giảm dung lượng)
     const base64 = canvas.toDataURL("image/jpeg", 0.96)
 
-const uid = window.sessionService.getStorageUserId();
+const userId = window.sessionService.getStorageUserId();
 const ref = doc(db,"users",uid)
 
     if(uploadType==="avatar"){
