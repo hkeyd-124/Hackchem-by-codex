@@ -1,11 +1,9 @@
 export function normalizeEmail(email) {
-  if (!email) return null;
-  return String(email).trim().toLowerCase();
+  return email ? String(email).trim().toLowerCase() : "";
 }
 
 export function normalizeWallet(wallet) {
-  if (!wallet) return null;
-  return String(wallet).trim();
+  return wallet ? String(wallet).trim().toLowerCase() : "";
 }
 
 export function buildDefaultUser({ uid, wallet = null, email = null, nowIso }) {
@@ -16,7 +14,7 @@ export function buildDefaultUser({ uid, wallet = null, email = null, nowIso }) {
     uid,
     wallet: normalizedWallet,
     email: normalizedEmail,
-
+    emailNormalized: normalizedEmail || null,
     name: "",
     avatar: "",
     cover: "",
@@ -42,7 +40,18 @@ export function buildSchemaPatch(userData = {}) {
   const patch = {};
   const providers = userData.providers || {};
   const system = userData.system || {};
+  
+  const normalizedEmail = normalizeEmail(userData.email);
+const normalizedWallet = normalizeWallet(userData.wallet);
 
+if (userData.email && userData.email !== normalizedEmail) {
+  patch.email = normalizedEmail;
+  patch.emailNormalized = normalizedEmail;
+}
+
+if (userData.wallet && userData.wallet !== normalizedWallet) {
+  patch.wallet = normalizedWallet;
+}
   if (typeof providers.wallet !== "boolean") {
     patch["providers.wallet"] = !!userData.wallet;
   }
