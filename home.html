@@ -485,7 +485,7 @@ padding: 0 10px;
 <script>
   const initialIdentity = window.sessionService.getCurrentIdentity()
 let walletAddress = initialIdentity.wallet
-let uid = initialIdentity.uid || initialIdentity.wallet
+let uid = window.sessionService.getStorageUserId()
  function fixChemicalFormula(text){
   return text.replace(
     /(?<!\$)(\b(?:[A-Z][a-z]?\d+)+\b)(?!\$)/g,
@@ -591,9 +591,8 @@ div.style = `
 const wallet = identity.wallet || "guest";
 const uid = identity.uid || wallet;
 
-  const data = JSON.parse(
-    localStorage.getItem("progress_" + id + "_" + uid)
-  );
+  const progressKey = window.sessionService.buildScopedKey("progress", id, uid);
+  const data = JSON.parse(localStorage.getItem(progressKey));
 
   if(!data) return 0;
 
@@ -655,16 +654,18 @@ async function sendAI(){
 
   const user = window.sessionService.getCurrentIdentity().userId;
 
-  let aiCount = parseInt(localStorage.getItem("ai_count_" + user)) || 0;
+  const aiCountKey = "ai_count_" + user;
+  const aiDayKey = "ai_day_" + user;
+  let aiCount = parseInt(localStorage.getItem(aiCountKey)) || 0;
 
   const today = new Date().toDateString();
-  const lastDay = localStorage.getItem("ai_day_" + user);
+  const lastDay = localStorage.getItem(aiDayKey);
 
   // ✅ reset đúng cách (KHÔNG phá hệ thống)
   if (lastDay !== today) {
     aiCount = 0;
-    localStorage.setItem("ai_day_" + user, today);
-    localStorage.setItem("ai_count_" + user, aiCount);
+    localStorage.setItem(aiDayKey, today);
+    localStorage.setItem(aiCountKey, aiCount);
   }
 
   const inputEl = document.getElementById("aiInput");
@@ -712,7 +713,7 @@ async function sendAI(){
 
       // ✅ chỉ tăng khi gọi API
       aiCount++;
-      localStorage.setItem("ai_count_" + user, aiCount);
+      localStorage.setItem(aiCountKey, aiCount);
 
     }catch(e){
       reply = "⚠️ Lỗi kết nối server";
@@ -1228,7 +1229,7 @@ const identity = window.sessionService.getCurrentIdentity()
 const walletAddress = identity.wallet
 const uid = identity.uid
 
-const userId = identity.userId === "guest" ? "" : identity.userId;
+const userId = window.sessionService.getStorageUserId();
 
 if(!userId){
   window.location.href="index.html";
@@ -1285,9 +1286,8 @@ let totalCorrect = 0
 
 lessons.forEach(id => {
 
-  const data = JSON.parse(
-    localStorage.getItem("progress_" + id + "_" + uid)
-  )
+  const progressKey = window.sessionService.buildScopedKey("progress", id, uid)
+  const data = JSON.parse(localStorage.getItem(progressKey))
 
   const total = totals[id]
   totalQuestions += total
@@ -1361,9 +1361,7 @@ if(emailBtn){
 }
 }
  
-window.handleCheckin = async () => {
-  const identity = window.sessionService.getCurrentIdentity()
-  const uid = identity.uid || identity.wallet
+const uid = window.sessionService.getStorageUserId();
   const ref = doc(db,"users",uid)
   const snap = await getDoc(ref)
 
@@ -1445,8 +1443,7 @@ fileInput.onchange=async(e)=>{
     // 🔥 nén ảnh (0.7 = giảm dung lượng)
     const base64 = canvas.toDataURL("image/jpeg", 0.96)
 
-    const identity = window.sessionService.getCurrentIdentity()
-const uid = identity.uid || identity.wallet
+const uid = window.sessionService.getStorageUserId();
 const ref = doc(db,"users",uid)
 
     if(uploadType==="avatar"){
@@ -1457,7 +1454,7 @@ const ref = doc(db,"users",uid)
     if(uploadType==="cover"){
       coverImg.src = base64
       await setDoc(ref,{cover:base64},{merge:true})
-    }
+    }    
 
     fileInput.value = ""
   }

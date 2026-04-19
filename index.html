@@ -700,7 +700,7 @@ else{
     const oldWallet = window.sessionService.getWallet();
 
 if(oldWallet && oldWallet !== walletAddress){
-  localStorage.removeItem("uid"); // 🔥 reset toàn bộ
+  window.sessionService.clearUid(); // 🔥 reset toàn bộ
 }
     window.sessionService.setCurrentWallet(walletAddress);
 window.sessionService.setCurrentUid(uid);
