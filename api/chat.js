@@ -1,7 +1,60 @@
+import { safeJsonParse, extractJsonBlock, isValidQuizPayload } from "./chatValidation.js";
+
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const REQUEST_TIMEOUT_MS = 15000;
+const MAX_RETRIES = 1;
+
+async function fetchCompletionWithRetry(payload, retries = MAX_RETRIES) {
+  let attempt = 0;
+  let lastError;
+
+  while (attempt <= retries) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(OPENAI_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok && response.status >= 500 && attempt < retries) {
+        attempt += 1;
+        continue;
+      }
+
+      return response;
+    } catch (err) {
+      clearTimeout(timeoutId);
+      lastError = err;
+      if (attempt >= retries) throw err;
+      attempt += 1;
+    }
+  }
+
+  throw lastError || new Error("OpenAI request failed");
+}
+
 export default async function handler(req, res) {
   try {
-    const { message } = req.body;
-    const isQuiz = req.body.mode === "quiz";
+    if (req.method !== "POST") {
+      return res.status(405).json({ reply: "Method không hợp lệ" });
+    }
+
+    const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+    const mode = req.body?.mode;
+    const isQuiz = mode === "quiz";
+
+    if (!message) {
+      return res.status(400).json({ reply: "Thiếu nội dung câu hỏi" });
+    }
 
     // ✅ TẠO messages TRƯỚC
     const messages = isQuiz
@@ -81,17 +134,10 @@ $$C_2H_4 + Br_2 → C_2H_4Br_2$$
           { role: "user", content: message }
         ];
 
-    // ✅ GỌI API
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages   // ✅ đúng chỗ
-      })
+    // ✅ GỌI API (timeout + retry)
+    const response = await fetchCompletionWithRetry({
+      model: "gpt-4o-mini",
+      messages
     });
 
     const data = await response.json();
@@ -99,6 +145,29 @@ $$C_2H_4 + Br_2 → C_2H_4Br_2$$
     console.log("DATA:", data);
 
     const reply = data.choices?.[0]?.message?.content || "AI chưa trả lời";
+
+    if (isQuiz) {
+      const extracted = extractJsonBlock(reply);
+      const parsed = extracted ? safeJsonParse(extracted) : null;
+
+      if (!isValidQuizPayload(parsed)) {
+        return res.status(502).json({
+          reply: JSON.stringify({
+            question: "Hệ thống đang bận, vui lòng thử lại.",
+            options: {
+              A: "Thử lại sau 10 giây",
+              B: "Kiểm tra kết nối mạng",
+              C: "Đổi chủ đề câu hỏi",
+              D: "Tất cả đều đúng"
+            },
+            answer: "D",
+            explanation: "Phản hồi AI chưa đúng schema quiz nên đã dùng fallback an toàn."
+          })
+        });
+      }
+
+      return res.status(200).json({ reply: JSON.stringify(parsed) });
+    }
 
     res.status(200).json({ reply });
 
