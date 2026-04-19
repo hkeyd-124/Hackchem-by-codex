@@ -99,7 +99,7 @@ if(snap.exists()){
   // ============================
   // 🔥 STEP 4: LƯU LOCAL
   // ============================
-  localStorage.setItem("uid", uid);
+  window.sessionService.setCurrentUid(uid);
 
   // ❗ KHÔNG set wallet ở đây
   // ❗ KHÔNG link tự động

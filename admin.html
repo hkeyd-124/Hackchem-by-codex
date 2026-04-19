@@ -93,6 +93,7 @@ button {
 
 </div>
 
+<script src="./sessionService.js"></script>
 <script type="module">
 
 import { getAuth, signInWithEmailAndPassword } 
@@ -113,7 +114,7 @@ let allUsers = [];
 // =========================
 async function checkAdmin(){
 
-  const uid = localStorage.getItem("uid");
+  const uid = window.sessionService.getUid();
 
   if(!uid){
     showLogin();
@@ -188,7 +189,7 @@ window.adminLogin = async function(){
       return;
     }
 
-    localStorage.setItem("uid", uid);
+    window.sessionService.setCurrentUid(uid);
 
     document.getElementById("email").value = "";
     document.getElementById("password").value = "";
