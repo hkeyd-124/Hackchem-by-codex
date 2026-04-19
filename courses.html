@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Khám phá khóa học</title>
+
+<style>
+body{
+  font-family:Arial;
+  background:#f5f5f5;
+  padding:30px;
+}
+
+.container{
+  max-width:700px;
+  margin:auto;
+}
+
+.header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:20px;
+}
+
+.title{
+  font-size:22px;
+  font-weight:bold;
+}
+
+.back{
+  padding:8px 15px;
+  background:#333;
+  color:white;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+/* TOPIC */
+.topic{
+  border:2px solid #333;
+  padding:12px;
+  border-radius:8px;
+  margin-bottom:10px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  cursor:pointer;
+}
+
+/* LESSON */
+.lesson{
+  margin-left:30px;
+  margin-top:10px;
+  border:2px solid #333;
+  padding:10px;
+  border-radius:6px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  cursor:pointer;
+}
+
+/* PROGRESS CIRCLE */
+.percent-circle{
+  width:50px;
+  height:50px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:bold;
+  background:#ccc;
+}
+
+.green{background:#4CAF50;}
+.yellow{background:#FFC107;}
+.red{background:#F44336;}
+.orange{background:#FF9800;}
+.gray{background:#ccc;}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="header">
+    <div class="title">📚 Khám phá khóa học</div>
+    <div class="back" onclick="goHome()">← Home</div>
+  </div>
+
+  <!-- TOPIC -->
+  <div class="topic" onclick="toggle('t1')">
+    <div>🧬 Chủ đề 1: Hữu cơ & Hydrocarbon</div>
+    <div class="percent-circle" id="topicPercent">0%</div>
+  </div>
+
+  <div id="t1">
+
+   <div class="lesson" onclick="openLesson('organic_1','Hợp chất hữu cơ')">
+     <div>Bài 1: Hợp chất hữu cơ</div>
+      <div class="percent-circle" id="lesson1Percent">0%</div>
+    </div>
+
+    <div class="lesson" onclick="openLesson('organic_2','Alkane')">
+      <div>Bài 2: Alkane</div>
+      <div class="percent-circle" id="lesson2Percent">0%</div>
+    </div>
+
+   <div class="lesson" onclick="openLesson('organic_3','Alkene')">
+     <div>Bài 3: Alkene</div>
+      <div class="percent-circle" id="lesson3Percent">0%</div>
+    </div>
+
+    <div class="lesson" onclick="openLesson('organic_4','Nhiên liệu')">
+      <div>Bài 4: Nhiên liệu</div>
+      <div class="percent-circle" id="lesson4Percent">0%</div>
+    </div>
+
+    <div class="lesson" id="bossLesson" onclick="openBoss()">
+      <div>🔥 Hydrocarbon Master 🔥</div>
+      <div class="percent-circle gray" id="bossStatus">LOCK</div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+const wallet = localStorage.getItem("wallet") || "guest";
+const uid = localStorage.getItem("uid") || wallet;
+/* NAV */
+function toggle(id){
+  const el = document.getElementById(id)
+  el.style.display = el.style.display==="none" ? "block" : "none"
+}
+
+function openLesson(id, name){
+
+  localStorage.setItem("currentLessonName", name);
+
+  const map = {
+    "organic_1": "alkane.html",
+    "organic_2": "alkane.html",
+    "organic_3": "alkene.html",   // 🔥 QUAN TRỌNG
+    "organic_4": "null"
+  };
+
+  window.location.href = "lesson/" + map[id] + "?lesson=" + id;
+}
+
+function goHome(){
+  window.location.href = "home.html"
+}
+
+/* CONFIG */
+const totals = {
+  organic_1: 15,
+  organic_2: 15,
+  organic_3: 15,
+  organic_4: 15
+}
+
+/* GET % */
+function getPercent(id){
+
+  const data = JSON.parse(
+    localStorage.getItem("progress_" + id + "_" + uid)
+  );
+
+  if(!data) return 0;
+
+  const correct = Object.values(data.answers || {})
+                        .filter(v => v === "correct").length;
+
+  const total = totals[id];
+
+  return Math.round((correct / total) * 100);
+}
+/* COLOR (THEO YÊU CẦU CỦA BẠN) */
+function setColor(el, percent){
+
+  if(percent < 25){
+    el.style.background = "#F44336" // đỏ
+  }
+  else if(percent < 50){
+    el.style.background = "#FF9800" // cam
+  }
+  else if(percent < 75){
+    el.style.background = "#FFC107" // vàng
+  }
+  else{
+    el.style.background = "#4CAF50" // xanh
+  }
+}
+
+/* BOSS */
+function checkBossUnlock(p1, p2, p3, p4){
+
+  const boss = document.getElementById("bossStatus")
+
+  if(p1>=75 && p2>=75 && p3>=75 && p4>=75){
+    boss.innerText = "GO"
+    boss.style.background = "#4CAF50"
+  }else{
+    boss.innerText = "LOCK"
+    boss.style.background = "#ccc"
+  }
+}
+
+function openBoss(){
+
+  const boss = document.getElementById("bossStatus")
+
+  if(boss.innerText === "LOCK"){
+    alert("🔒 Hoàn thành tất cả bài ≥ 75% để mở khóa!")
+    return
+  }
+
+  window.location.href = "lesson/boss.html"
+}
+
+/* APPLY */
+function applyProgress(){
+
+  const p1 = getPercent("organic_1")
+  const p2 = getPercent("organic_2")
+  const p3 = getPercent("organic_3")
+  const p4 = getPercent("organic_4")
+
+  const el1 = document.getElementById("lesson1Percent")
+  const el2 = document.getElementById("lesson2Percent")
+  const el3 = document.getElementById("lesson3Percent")
+  const el4 = document.getElementById("lesson4Percent")
+  const topicEl = document.getElementById("topicPercent")
+
+  el1.innerText = p1 + "%"
+  el2.innerText = p2 + "%"
+  el3.innerText = p3 + "%"
+  el4.innerText = p4 + "%"
+
+  setColor(el1, p1)
+  setColor(el2, p2)
+  setColor(el3, p3)
+  setColor(el4, p4)
+
+  const avg = Math.round((p1+p2+p3+p4)/4)
+  topicEl.innerText = avg + "%"
+  setColor(topicEl, avg)
+
+  // 🔥 FIX QUAN TRỌNG
+  checkBossUnlock(p1, p2, p3, p4)
+}
+
+/* INIT */
+applyProgress()
+
+</script>
+
+</body>
+</html>
