@@ -12,9 +12,10 @@ export function buildDefaultUser({ uid, wallet = null, email = null, nowIso }) {
 
   return {
     uid,
-    wallet: normalizedWallet,
-    email: normalizedEmail,
+    wallet: normalizedWallet || null,
+    email: normalizedEmail || null,
     emailNormalized: normalizedEmail || null,
+
     name: "",
     avatar: "",
     cover: "",
@@ -40,35 +41,47 @@ export function buildSchemaPatch(userData = {}) {
   const patch = {};
   const providers = userData.providers || {};
   const system = userData.system || {};
-  
+
   const normalizedEmail = normalizeEmail(userData.email);
-const normalizedWallet = normalizeWallet(userData.wallet);
+  const normalizedWallet = normalizeWallet(userData.wallet);
 
-if (userData.email && userData.email !== normalizedEmail) {
-  patch.email = normalizedEmail;
-  patch.emailNormalized = normalizedEmail;
-}
+  // normalize email
+  if (normalizedEmail && userData.email !== normalizedEmail) {
+    patch.email = normalizedEmail;
+  }
 
-if (userData.wallet && userData.wallet !== normalizedWallet) {
-  patch.wallet = normalizedWallet;
-}
+  if (normalizedEmail && userData.emailNormalized !== normalizedEmail) {
+    patch.emailNormalized = normalizedEmail;
+  }
+
+  // normalize wallet
+  if (normalizedWallet && userData.wallet !== normalizedWallet) {
+    patch.wallet = normalizedWallet;
+  }
+
+  // providers
   if (typeof providers.wallet !== "boolean") {
-    patch["providers.wallet"] = !!userData.wallet;
-  }
-  if (typeof providers.email !== "boolean") {
-    patch["providers.email"] = !!userData.email;
+    patch["providers.wallet"] = !!normalizedWallet;
   }
 
+  if (typeof providers.email !== "boolean") {
+    patch["providers.email"] = !!normalizedEmail;
+  }
+
+  // system
   if (!system.status) {
     patch["system.status"] = "active";
   }
+
   if (!system.role) {
     patch["system.role"] = "user";
   }
 
+  // numeric
   if (typeof userData.points !== "number") {
     patch.points = Number(userData.points) || 0;
   }
+
   if (typeof userData.streak !== "number") {
     patch.streak = Number(userData.streak) || 1;
   }
