@@ -190,7 +190,7 @@ const wallet = identity.wallet || "guest";
 const progressKey = window.sessionService.buildScopedKey("progress", lessonId, uid);
 const bestKey = window.sessionService.buildScopedKey("best", lessonId, uid);
 
-// MIGRATE OLD DATA (wallet → uid)
+// 🔥 MIGRATE OLD DATA (wallet → uid)
 const oldProgressKey = window.sessionService.buildScopedKey("progress", lessonId, wallet);
 const newProgressKey = window.sessionService.buildScopedKey("progress", lessonId, uid);
 

@@ -19,11 +19,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 /* USER */
-const ss = window.sessionService;
-
-let userId = ss?.getStorageUserId
-  ? ss.getStorageUserId()
-  : localStorage.getItem("uid");
+let userId = window.sessionService.getUid();
 
 if(userId){
   localStorage.setItem("username", userId);

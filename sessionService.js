@@ -24,7 +24,6 @@
     };
   }
 
-  // 🔥 Phase 1.1
   function getStorageUserId() {
     const { uid, wallet } = getCurrentIdentity();
     return uid || wallet || null;
@@ -65,19 +64,12 @@
     getUid,
     getWallet,
     getCurrentIdentity,
-
-    // 🔥 Phase 1.1
     getStorageUserId,
     getStorageUserIdOrGuest,
     buildScopedKey,
-
-    // setters
     setCurrentUid,
     setCurrentWallet,
-
-    // clear
     clearUid,
     clearSession
   };
-
 })(window);

@@ -7,6 +7,7 @@
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
 <script src="./sessionService.js"></script>
+<script src="./pointsService.js"></script>
 <style> 
 body{margin:0;font-family:Arial;display:flex;background:#f5f5f5}
 .sidebar{width:250px;background:#fff;height:100vh;padding:20px;border-right:1px solid #eee}
@@ -775,35 +776,9 @@ function openCheckin(){
 function closeCheckin(){
   document.getElementById("checkinModal").classList.add("hidden")
 }
-  function getReward(streak){
-  if(streak === 1) return 1
-  if(streak === 2) return 2
-  if(streak === 3) return 3
-  if(streak === 4) return 4
-  if(streak <= 9) return 5
-  return 10
-}
-  /* 🔥 GIỮ NGUYÊN CODE CŨ */
-  function getVNDate(){
-  return new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
-  )
-}
-  function formatDate(date){
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-function getTodayKey(){
-  const vn = getVNDate()
-  return formatDate(vn)
-}
-function getYesterdayKey(){
-  const vn = getVNDate()
-  vn.setDate(vn.getDate() - 1)
-  return formatDate(vn)
-}
+const getReward = window.pointsService.getReward;
+const getTodayKey = window.pointsService.getTodayKey;
+const getYesterdayKey = window.pointsService.getYesterdayKey;
   function renderCheckinDays(){
 const streak = window.currentUserStreak || 0
 
@@ -1360,45 +1335,39 @@ if(emailBtn){
 }
 }
 }
- window.handleCheckin = async function(){
-const userId = window.sessionService.getStorageUserId();
+ 
+window.handleCheckin = async () => {
+  const uid = window.sessionService.getStorageUserId()
   const ref = doc(db,"users",uid)
   const snap = await getDoc(ref)
 
   let data = snap.exists() ? snap.data() : {}
 
-  const today = getTodayKey()
-  const yesterday = getYesterdayKey()
-  const last = data.lastCheckin || ""
+  const checkinUpdate = window.pointsService.buildCheckinUpdate({
+    points: data.points || 0,
+    streak: data.streak || 0,
+    lastCheckin: data.lastCheckin || ""
+  });
 
-  console.log("LAST:", last || "null")
-  console.log("YESTERDAY:", yesterday)
-  console.log("TODAY:", today)
+  console.log("LAST:", data.lastCheckin || "null")
+  console.log("YESTERDAY:", checkinUpdate.yesterday)
+  console.log("TODAY:", checkinUpdate.today)
 
   // 🚫 đã check hôm nay
-  if(last === today){
+  if(!checkinUpdate.canCheckin){
     alert("Bạn đã check-in hôm nay rồi!")
     return
   }
-  let streak = 1
-  // 🔥 nếu check liên tiếp
-  if(last === yesterday){
-    streak = (data.streak || 0) + 1
-  }
-  // ❌ nếu bỏ ngày → reset về 1
-  else{
-    streak = 1
-  }
-  const reward = getReward(streak)
+
   await setDoc(ref,{
-    points: (data.points || 0) + reward,
-    streak: streak,
-    lastCheckin: today
+    points: checkinUpdate.nextPoints,
+    streak: checkinUpdate.nextStreak,
+    lastCheckin: checkinUpdate.today
   },{merge:true})
-  flyPoints(reward)
-  showReward(reward)
-  window.currentUserStreak = streak
-  window.currentLastCheckin = today
+  flyPoints(checkinUpdate.reward)
+  showReward(checkinUpdate.reward)
+  window.currentUserStreak = checkinUpdate.nextStreak
+  window.currentLastCheckin = checkinUpdate.today
   await loadUser()
 }
   
@@ -1443,7 +1412,7 @@ fileInput.onchange=async(e)=>{
     // 🔥 nén ảnh (0.7 = giảm dung lượng)
     const base64 = canvas.toDataURL("image/jpeg", 0.96)
 
-const userId = window.sessionService.getStorageUserId();
+const uid = window.sessionService.getStorageUserId()
 const ref = doc(db,"users",uid)
 
     if(uploadType==="avatar"){
