@@ -6,6 +6,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="./sessionService.js"></script>
 <style> 
 body{margin:0;font-family:Arial;display:flex;background:#f5f5f5}
 .sidebar{width:250px;background:#fff;height:100vh;padding:20px;border-right:1px solid #eee}
@@ -482,8 +483,9 @@ padding: 0 10px;
 <input type="file" id="fileInput" accept="image/*" hidden>
 
 <script>
-  let walletAddress = localStorage.getItem("wallet")
-let uid = localStorage.getItem("uid") || walletAddress
+  const initialIdentity = window.sessionService.getCurrentIdentity()
+let walletAddress = initialIdentity.wallet
+let uid = initialIdentity.uid || initialIdentity.wallet
  function fixChemicalFormula(text){
   return text.replace(
     /(?<!\$)(\b(?:[A-Z][a-z]?\d+)+\b)(?!\$)/g,
@@ -585,8 +587,9 @@ div.style = `
   //LẤY MỤC TIÊU TỪ COURSES//
   function getLessonPercent(id){
 
-  const wallet = localStorage.getItem("wallet") || "guest";
-const uid = localStorage.getItem("uid") || wallet;
+  const identity = window.sessionService.getCurrentIdentity();
+const wallet = identity.wallet || "guest";
+const uid = identity.uid || wallet;
 
   const data = JSON.parse(
     localStorage.getItem("progress_" + id + "_" + uid)
@@ -650,7 +653,7 @@ function formatAIResponse(text){
 }
 async function sendAI(){
 
-  const user = localStorage.getItem("wallet") || "guest";
+  const user = window.sessionService.getCurrentIdentity().userId;
 
   let aiCount = parseInt(localStorage.getItem("ai_count_" + user)) || 0;
 
@@ -1221,10 +1224,11 @@ window.loadLeaderboard = async function(){
 }
 
 async function loadUser(){
-const walletAddress = localStorage.getItem("wallet")
-const uid = localStorage.getItem("uid")
+const identity = window.sessionService.getCurrentIdentity()
+const walletAddress = identity.wallet
+const uid = identity.uid
 
-const userId = uid ? uid : walletAddress;
+const userId = identity.userId === "guest" ? "" : identity.userId;
 
 if(!userId){
   window.location.href="index.html";
@@ -1358,8 +1362,8 @@ if(emailBtn){
 }
  
 window.handleCheckin = async () => {
-  const walletAddress = localStorage.getItem("wallet")
-  const uid = localStorage.getItem("uid") || walletAddress
+  const identity = window.sessionService.getCurrentIdentity()
+  const uid = identity.uid || identity.wallet
   const ref = doc(db,"users",uid)
   const snap = await getDoc(ref)
 
@@ -1441,8 +1445,8 @@ fileInput.onchange=async(e)=>{
     // 🔥 nén ảnh (0.7 = giảm dung lượng)
     const base64 = canvas.toDataURL("image/jpeg", 0.96)
 
-    const wallet = localStorage.getItem("wallet")
-const uid = localStorage.getItem("uid") || wallet
+    const identity = window.sessionService.getCurrentIdentity()
+const uid = identity.uid || identity.wallet
 const ref = doc(db,"users",uid)
 
     if(uploadType==="avatar"){
@@ -1473,7 +1477,7 @@ const ref = doc(db,"users",uid)
   });
 
   const wallet = accounts[0];
-  const uid = localStorage.getItem("uid");
+  const uid = window.sessionService.getUid();
 
   if(!uid){
     alert("Bạn cần đăng nhập trước!");
@@ -1505,7 +1509,7 @@ const ref = doc(db,"users",uid)
     uid: uid
   });
 
-  localStorage.setItem("wallet", wallet);
+  window.sessionService.setCurrentWallet(wallet);
 
   alert("✅ Đã kết nối ví!");
 
@@ -1531,7 +1535,7 @@ window.linkEmail = async function(){
     return;
   }
 
-  const uid = localStorage.getItem("uid");
+  const uid = window.sessionService.getUid();
 
   if(!uid){
     alert("Bạn cần đăng nhập trước!");
