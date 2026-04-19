@@ -202,7 +202,7 @@ $$C_2H_4 + Br_2 → C_2H_4Br_2$$
         });
       }
 
-      return res.status(200).json(parsed);
+      return res.status(200).json({ reply: JSON.stringify(parsed) });
     }
 
     res.status(200).json({ reply });
