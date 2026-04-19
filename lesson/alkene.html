@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Lesson</title>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.10.0/dist/ethers.umd.min.js"></script>
+<style>
+body { margin:0; font-family:Arial; }
+
+.header-bar{
+  position:fixed; top:0; left:0;
+  width:100%; height:60px;
+  background:#b7d7e0;
+  display:flex; align-items:center;
+  padding-left:15px;
+}
+
+.score-box, .best-box{
+  position:absolute;
+  top:10px;
+  background:white;
+  padding:6px 12px;
+  border-radius:8px;
+}
+.score-box{ right:20px; }
+.best-box{ right:170px; }
+
+#scoreValue{ color:red; }
+
+.container{ display:flex; height:100vh; margin-top:70px; }
+.left{ width:50%; }
+iframe{ width:100%; height:100%; }
+
+.right{ width:50%; padding:20px; }
+
+#navBar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+
+.xp-bar{
+  height:8px;
+  background:#ddd;
+  margin:10px 0;
+  border-radius:5px;
+  position:relative;
+}
+.xp-fill{
+  height:100%;
+  width:0%;
+  background:#4CAF50;
+  border-radius:5px;
+}
+
+.reset-btn{
+  position:absolute;
+  right:0;
+  top:-25px;
+  display:none;
+}
+
+.options{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+
+.options button{
+  padding:12px;
+  border:1px solid #ccc;
+  cursor:pointer;
+}
+
+.selected{ background:#fff3cd; }
+.correct{ background:#4CAF50; color:white; }
+.wrong{ background:red; color:white; }
+
+.nav-item{
+  padding:6px 10px;
+  border:1px solid #ccc;
+  cursor:pointer;
+}
+
+.bottom-bar{
+  position:fixed;
+  bottom:20px;
+  left:calc(50% + 20px);
+  right:20px;
+  display:flex;
+  justify-content:space-between;
+}
+  .certificate {
+  padding: 20px;
+  border-radius: 12px;
+  text-align: center;
+  font-family: serif;
+  background: #fff;
+}
+
+.cert-gold { border: 8px solid gold; }
+.cert-silver { border: 8px solid silver; }
+.cert-bronze { border: 8px solid #cd7f32; }
+</style>
+</head>
+
+<body>
+
+<div class="header-bar">
+  <button onclick="goBack()">← Quay lại</button>
+
+  <div class="best-box">
+    Thành tích: <span id="bestScore">0</span>
+  </div>
+
+  <div class="score-box">
+    Điểm: <span id="scoreValue">150</span>
+  </div>
+</div>
+
+<div class="container">
+
+<div class="left">
+  <iframe src="../assets/docs/lesson1.pdf"></iframe>
+</div>
+
+<div class="right">
+
+<div id="navBar"></div>
+<button id="openCertBtn" onclick="showCertificate()" style="
+  display:none;
+  margin-top:10px;
+  padding:10px 16px;
+  background:#4CAF50;
+  color:white;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+">
+  🎓 Nhận chứng chỉ
+</button>
+<div class="xp-bar">
+  <button id="resetBtn" class="reset-btn" onclick="resetLesson()">Làm lại</button>
+  <div id="xpFill" class="xp-fill"></div>
+</div>
+
+<h2 id="questionText"></h2>
+<div id="options" class="options"></div>
+
+</div>
+
+<div class="bottom-bar">
+  <button onclick="showHint()">Gợi ý</button>
+  <button onclick="checkAnswer()">Kiểm tra</button>
+</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+<script type="module">
+import { db, userId, doc, setDoc, getDoc } from "../firebase.js";
+const CONTRACT_ADDRESS = "0x016f342fbd80C4a07AB0829b14AdfAe7b26f385B";
+
+const ABI = [
+  "function mint(string tokenURI, string lessonId)",
+  "function hasMinted(address,string) view returns (bool)"
+];
+/* CONFIG */
+const params = new URLSearchParams(window.location.search);
+
+const lessonId = params.get("lesson") || "organic_3";
+  const lessonName = localStorage.getItem("currentLessonName") || lessonId;
+let username = "User";
+
+async function loadUsername(){
+  const userRef = doc(db,"users",userId);
+  const snap = await getDoc(userRef);
+
+  if(snap.exists()){
+    username = snap.data().name || "User";
+  }
+}
+const wallet = localStorage.getItem("wallet") || "guest";
+
+const progressKey = "progress_" + lessonId + "_" + wallet;
+const bestKey = "best_" + lessonId + "_" + wallet;
+
+/* STATE */
+let score = 150;
+let current = 0;
+let selected = null;
+let questionState = {};
+let correctCount = 0;
+let best = parseInt(localStorage.getItem(bestKey)) || 0;
+let tfSelected = [];
+let tfButtons = []; // 🔥 thêm dòng này
+let shortInput;
+let tfCorrectState = {}; // 🔥 object theo từng câu
+
+/* FIREBASE */
+async function saveToCloud(){
+  if(!userId) return;
+
+  const data = JSON.parse(localStorage.getItem(progressKey));
+  if(!data) return;
+
+await setDoc(
+  doc(db, "users", userId, "lessons", lessonId),
+  {
+    ...data,
+    updatedAt: Date.now()
+  },
+  { merge: true } // 🔥 QUAN TRỌNG
+);
+}
+
+/* 🔥 FIRST COMPLETION */
+async function saveFirstCompletion(){
+
+  if(!userId) return;
+
+  const ref = doc(db, "users", userId, "lessons", lessonId);
+  const snap = await getDoc(ref);
+
+  if(snap.exists() && snap.data().firstScore){
+    return;
+  }
+
+  await setDoc(ref, {
+    firstScore: score
+  }, { merge:true });
+}
+
+/* LOAD */
+async function loadFromCloud(){
+  if(!userId) return;
+
+  const snap = await getDoc(doc(db,"users",userId,"lessons",lessonId));
+
+  if(snap.exists()){
+    localStorage.setItem(progressKey, JSON.stringify(snap.data()));
+  }
+}
+const PINATA_JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySW5mb3JtYXRpb24iOnsiaWQiOiJkZTJhOWNhYS1mNDI1LTRjNWUtOGE3OS02NzA3MmNjNjFiMWEiLCJlbWFpbCI6Im5oYXRreWN1YXZ1b25nMkBnbWFpbC5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwicGluX3BvbGljeSI6eyJyZWdpb25zIjpbeyJkZXNpcmVkUmVwbGljYXRpb25Db3VudCI6MSwiaWQiOiJGUkExIn0seyJkZXNpcmVkUmVwbGljYXRpb25Db3VudCI6MSwiaWQiOiJOWUMxIn1dLCJ2ZXJzaW9uIjoxfSwibWZhX2VuYWJsZWQiOmZhbHNlLCJzdGF0dXMiOiJBQ1RJVkUifSwiYXV0aGVudGljYXRpb25UeXBlIjoic2NvcGVkS2V5Iiwic2NvcGVkS2V5S2V5IjoiZjI5YzYzMzZjMjc2OTNiZDUzMDgiLCJzY29wZWRLZXlTZWNyZXQiOiJmNTIyYTU3NmE1OTNiZWNkZDZmNzNkZWQ0OWZjZjIzZjUzZmM0NTY3MzljOGQ5MmQ1NWExODljYWRkZWJmMDA5IiwiZXhwIjoxODA3MTU0MzE2fQ.UZUdxPn4sMl8P6knOe2ZrQKCHkpL1-6XswP0s3BiN6k";
+
+async function uploadToIPFS(file){
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${PINATA_JWT}`
+    },
+    body: formData
+  });
+
+  const data = await res.json();
+
+  console.log("PINATA:", data);
+
+  if(!data.IpfsHash){
+    throw new Error("Upload failed");
+  }
+
+  return data.IpfsHash;
+}
+  async function generateImage(){
+
+  const element = document.querySelector(".certificate");
+
+  const canvas = await html2canvas(element);
+
+  return new Promise(resolve=>{
+    canvas.toBlob(blob=>{
+      const file = new File([blob], "certificate.png", { type: "image/png" });
+      resolve(file);
+    });
+  });
+}
+ async function createMetadata(imageCID){
+  const snap = await getDoc(doc(db,"users",userId,"lessons",lessonId));
+  let finalScore = score;
+  if(snap.exists() && snap.data().firstScore){
+    finalScore = snap.data().firstScore;
+  }
+  const finalRank = getRank(finalScore);
+  return {
+    name: `Certificate - ${lessonName}`,
+    description: "HackChem NFT Certificate",
+    image: `https://gateway.pinata.cloud/ipfs/${imageCID}`,
+    attributes: [
+      { trait_type: "Student", value: username },
+      { trait_type: "Lesson", value: lessonName },
+      { trait_type: "Score", value: finalScore },
+      { trait_type: "Rank", value: finalRank.toUpperCase() }
+    ]
+  };
+}
+  async function uploadMetadata(metadata){
+
+  const blob = new Blob(
+    [JSON.stringify(metadata)],
+    { type: "application/json" }
+  );
+
+  const file = new File([blob], "metadata.json");
+
+  return await uploadToIPFS(file);
+}
+/* QUESTIONS */
+const questions = [
+
+/* ETHYLENE SECTION */
+
+/* 1 */
+{
+type:"single",
+q:"Công thức phân tử của ethylene là",
+opt:[
+"C<sub>2</sub>H<sub>4</sub>",
+"C<sub>2</sub>H<sub>6</sub>",
+"CH<sub>4</sub>",
+"C<sub>2</sub>H<sub>2</sub>"
+],
+a:0
+},
+
+/* 2 */
+{
+type:"single",
+q:"Tính chất vật lý của khí ethylene",
+opt:[
+"là chất khí không màu, không mùi, tan trong nước, nhẹ hơn không khí",
+"là chất khí, không màu, không mùi, ít tan trong nước, nhẹ hơn không khí",
+"là chất khí màu vàng lục, không mùi, ít tan trong nước, nặng hơn không khí",
+"là chất khí không màu, mùi hắc, ít tan trong nước, nặng hơn không khí"
+],
+a:1
+},
+
+/* 3 */
+{
+type:"single",
+q:"Hóa chất dùng để loại bỏ khí ethylene có lẫn trong khí methane là",
+opt:[
+"dung dịch bromine",
+"dung dịch phenolphthalein",
+"dung dịch hydrochloric acid",
+"dung dịch nước vôi trong"
+],
+a:0
+},
+
+/* 4 */
+{
+type:"single",
+q:"Đốt cháy chất nào sau đây cho số mol CO<sub>2</sub> bằng số mol H<sub>2</sub>O?",
+opt:[
+"CH<sub>4</sub>",
+"C<sub>2</sub>H<sub>4</sub>",
+"C<sub>2</sub>H<sub>2</sub>",
+"C<sub>6</sub>H<sub>6</sub>"
+],
+a:1
+},
+
+  
+/* 6 */
+{
+type:"single",
+q:"Khí CH<sub>4</sub> và C<sub>2</sub>H<sub>4</sub> có tính chất hóa học giống nhau là",
+opt:[
+"tham gia phản ứng cộng với dung dịch bromine",
+"tham gia phản ứng cộng với khí hydrogen",
+"tham gia phản ứng trùng hợp",
+"tham gia phản ứng cháy với oxygen tạo CO<sub>2</sub> và H<sub>2</sub>O"
+],
+a:3
+},
+
+/* 7 */
+{
+type:"single",
+q:"Trong điều kiện nhiệt độ, áp suất không đổi thì khí ethylene phản ứng với khí oxygen theo tỉ lệ thể tích là",
+opt:[
+"1 lít khí C<sub>2</sub>H<sub>4</sub> : 3 lít khí O<sub>2</sub>",
+"1 lít khí C<sub>2</sub>H<sub>4</sub> : 2 lít khí O<sub>2</sub>",
+"2 lít khí C<sub>2</sub>H<sub>4</sub> : 2 lít khí O<sub>2</sub>",
+"2 lít khí C<sub>2</sub>H<sub>4</sub> : 3 lít khí O<sub>2</sub>"
+],
+a:0
+},
+
+/* 8 */
+{
+type:"short",
+q:`
+Cho 1,2395 lít ethylene (đkc) tác dụng với dung dịch bromine. Khối lượng sản phẩm tạo thành là
+`,
+a:"10.8 gam"
+},
+
+/* 9 TRUE FALSE */
+{
+type:"truefalse",
+q:"Trong các nhận định sau, hãy cho biết nhận định nào đúng/sai?",
+opt:[
+"Phản ứng cháy của butane (C<sub>4</sub>H<sub>10</sub>) tạo ra CO<sub>2</sub> và H<sub>2</sub>O",
+"Phản ứng cháy của alkane không sinh ra nước",
+"Phản ứng cháy của Propane (C<sub>3</sub>H<sub>8</sub>) cần ít oxygen hơn của methane",
+"Để giảm thiểu ô nhiễm từ phản ứng cháy của alkane, cần hạn chế lượng oxy cung cấp và điều kiện nhiệt độ"
+],
+a:[true,false,false,false]
+},
+
+/* 10 */
+{
+type:"single",
+q:"Cho 2,479 lít khí C<sub>2</sub>H<sub>4</sub> (đkc) phản ứng với dung dịch bromine 0,1M. Thể tích dung dịch bromine tham gia phản ứng là",
+opt:[
+"2 lít",
+"1,5 lít",
+"1 lít",
+"0,5 lít"
+],
+a:2
+},
+
+/* 11 */
+{
+type:"single",
+q:"Các trái cây chín sinh ra khí",
+opt:[
+"methane",
+"ethane",
+"ethylene",
+"acetylene"
+],
+a:2
+},
+
+/* 12 */
+{
+type:"single",
+q:"Để nhận biết hỗn hợp C<sub>2</sub>H<sub>4</sub>, CH<sub>4</sub>, CO<sub>2</sub> có thể sử dụng lần lượt các hóa chất là",
+opt:[
+"dung dịch bromine, SO<sub>2</sub>",
+"KOH, dung dịch bromine",
+"NaOH, dung dịch bromine",
+"Ca(OH)<sub>2</sub>, dung dịch bromine"
+],
+a:3
+},
+
+/* 13 */
+{
+type:"single",
+q:`Cho các phát biểu sau:<br><br>
+
+(a) Methane, ethylene lần lượt có công thức phân tử là CH<sub>4</sub>, C<sub>2</sub>H<sub>2</sub>.<br>
+(b) Methane, ethylene đều là các khí không màu, không mùi, nhẹ hơn nước, ít tan trong nước.<br>
+(c) Để nhận biết methane và ethylene ta có thể dùng dung dịch bromine.<br>
+(d) Khi đốt cháy methane ta thu được số mol CO<sub>2</sub> bằng số mol H<sub>2</sub>O.<br><br>
+
+Số phát biểu đúng là`,
+opt:[
+"1",
+"2",
+"3",
+"4"
+],
+a:1
+},
+
+/* 14 MULTI → dùng TRUE FALSE workaround */
+{
+type:"truefalse",
+q:"Những hydrocarbon nào sau đây có thể tham gia phản ứng trùng hợp?",
+opt:[
+"CH<sub>4</sub>",
+"CH<sub>2</sub>=CH<sub>2</sub>",
+"CH<sub>3</sub>-CH=CH<sub>2</sub>",
+"CH<sub>3</sub>-CH=CH-CH<sub>3</sub>"
+],
+a:[false,true,true,true]
+},
+
+/* 15 */
+{
+type:"truefalse",
+q:"Trong các nhận định sau, hãy cho biết nhận định nào đúng/sai?",
+opt:[
+"Propane (C<sub>3</sub>H<sub>8</sub>) là một hydrocarbon thường tồn tại ở dạng khí",
+"Các hydrocarbon đều hòa tan tốt trong nước",
+"Ethylene là một hydrocarbon có trong khí sinh ra từ một số loại quả chín",
+"Để sử dụng hydrocarbon hiệu quả, cần xác định trạng thái tồn tại của chúng ở điều kiện thường"
+],
+a:[true,false,true,true]
+},
+
+/* 16 */
+{
+type:"single",
+q:"Dẫn 3,7185 lít ethylene qua dung dịch chứa 20g bromine. Hiện tượng quan sát được là:",
+opt:[
+"Màu vàng của dung dịch không thay đổi",
+"Màu vàng của dung dịch brom nhạt hơn lúc đầu",
+"Màu vàng nhạt dần và dung dịch chuyển thành màu trong suốt",
+"Màu vàng sẽ đậm hơn lúc đầu"
+],
+a:2
+}
+
+];
+
+/* LOAD LOCAL */
+function loadProgress(){
+  const d = JSON.parse(localStorage.getItem(progressKey));
+  if(!d) return;
+
+  current = d.current || 0;
+  questionState = d.answers || {};
+  score = d.score || 150;
+
+  correctCount = Object.values(questionState).filter(v=>v==="correct").length;
+}
+
+/* SAVE LOCAL */
+function saveProgress(){
+  localStorage.setItem(progressKey, JSON.stringify({
+    current,
+    answers: questionState,
+    score
+  }));
+}
+
+/* BEST */
+function saveBest(){
+  if(score > best){
+    best = score;
+    localStorage.setItem(bestKey, best);
+
+    setDoc(doc(db,"users",userId,"stats","best_"+lessonId),{
+      best
+    });
+  }
+  bestScore.innerText = best;
+}
+
+/* UI */
+function updateScore(){ scoreValue.innerText = score; }
+
+function updateXP(){
+  const percent = correctCount / questions.length * 100;
+  xpFill.style.width = percent + "%";
+
+  if(percent === 100){
+    resetBtn.style.display = "block";
+  }
+}
+
+/* NAV */
+function renderNav(){
+  navBar.innerHTML="";
+  questions.forEach((_,i)=>{
+    let div=document.createElement("div");
+    div.className="nav-item";
+    div.innerText=i+1;
+
+    if(questionState[i]==="correct"){
+      div.style.background="#4CAF50";
+      div.style.color="white";
+    }
+
+    if(i===current){
+      div.style.border="2px solid orange";
+    }
+
+    div.onclick=()=>{
+      current=i;
+      loadQuestion();
+      saveProgress();
+    };
+
+    navBar.appendChild(div);
+  });
+}
+
+/* LOAD QUESTION */
+function loadQuestion(){
+
+  renderNav();
+
+  const q = questions[current];
+  questionText.innerHTML = q.q;
+
+  options.innerHTML="";
+  selected=null;
+ tfSelected = [];
+tfButtons = [];
+if(q.type==="truefalse"){
+  if(!tfCorrectState[current]){
+    tfCorrectState[current] = new Array(q.opt.length).fill(false);
+  }
+}
+  if(q.type==="single"){
+    q.opt.forEach((o,i)=>{
+      let btn=document.createElement("button");
+      btn.innerHTML=o;
+      btn.onclick=()=>select(i);
+      options.appendChild(btn);
+    });
+
+    if(questionState[current]==="correct"){
+      options.children[q.a].classList.add("correct");
+    }
+  }
+  
+
+if(q.type==="truefalse"){
+
+  tfSelected = new Array(q.opt.length).fill(null);
+  tfButtons = [];
+
+  q.opt.forEach((text,i)=>{
+
+    let row = document.createElement("div");
+    row.style.display = "grid";
+    row.style.gridTemplateColumns = "1fr auto"; // 🔥 text | nút
+    row.style.alignItems = "center";
+    row.style.gap = "10px";
+    row.style.marginBottom = "12px";
+
+    let label = document.createElement("div");
+    label.innerHTML = text;
+label.style.wordBreak = "break-word";
+    let box = document.createElement("div");
+box.style.display = "grid";
+box.style.gridTemplateColumns = "1fr 1fr"; // 🔥 Đ | S chia đều
+box.style.width = "80px"; // 🔥 cố định chiều ngang
+box.style.border = "1px solid #ccc";
+box.style.borderRadius = "6px";
+box.style.overflow = "hidden";
+
+    let btnD = document.createElement("button");
+    btnD.innerText="Đ";
+    btnD.style.width = "100%";
+btnD.style.height = "36px";
+    let btnS = document.createElement("button");
+    btnS.innerText="S";
+    btnS.style.width="100%";
+btnS.style.height = "36px";
+    btnD.onclick = ()=>{
+      if(questionState[current]==="correct") return;
+
+      tfSelected[i]=true;
+
+      btnD.classList.add("selected");
+      btnS.classList.remove("selected");
+    };
+
+    btnS.onclick = ()=>{
+      if(questionState[current]==="correct") return;
+
+      tfSelected[i]=false;
+
+      btnS.classList.add("selected");
+      btnD.classList.remove("selected");
+    };
+
+    box.appendChild(btnD);
+    box.appendChild(btnS);
+
+    row.appendChild(label);
+    row.appendChild(box);
+
+    options.appendChild(row);
+
+    // 🔥 LƯU BUTTON LẠI
+    tfButtons.push({btnD, btnS});
+    // 🔥 HIỂN THỊ LẠI MÀU XANH
+if(tfCorrectState[current] && tfCorrectState[current][i]){
+  if(q.a[i]){
+    btnD.classList.add("correct");
+  }else{
+    btnS.classList.add("correct");
+  }
+}
+  });
+}
+if(q.type==="short"){
+
+  shortInput = document.createElement("input");
+  shortInput.type = "text";
+
+  shortInput.style.width="100%";
+  shortInput.style.padding="16px";     // 🔥 to hơn
+  shortInput.style.fontSize="18px";    // 🔥 dễ nhìn
+  shortInput.style.border="2px solid #ccc";
+  shortInput.style.borderRadius="8px";
+
+  shortInput.placeholder="Nhập đáp án...";
+
+  options.appendChild(shortInput);
+}
+}
+
+/* SELECT */
+function select(i){
+
+  if(questionState[current]==="correct") return; // 🔥 CHẶN
+
+  [...options.children].forEach(b=>b.classList.remove("selected"));
+  selected=i;
+  options.children[i].classList.add("selected");
+}
+
+/* CHECK */
+function checkAnswer(){
+if(questionState[current]==="correct") return;
+  const q = questions[current];
+
+  if(q.type==="single"){
+
+    if(selected===null) return;
+
+    if(selected===q.a){
+
+      if(questionState[current]!=="correct"){
+        correctCount++;
+        questionState[current]="correct";
+        score+=20;
+        saveProgress();
+        saveToCloud();
+      }
+
+      options.children[q.a].classList.add("correct");
+      confetti();
+
+    }else{
+      score-=5;
+      options.children[selected].classList.add("wrong");
+      setTimeout(()=>options.children[selected].classList.remove("wrong"),500);
+    }
+  }
+
+if(q.type==="truefalse"){
+
+  let newlyCorrect = 0;
+
+  q.a.forEach((ans,i)=>{
+
+    const {btnD, btnS} = tfButtons[i];
+
+    btnD.classList.remove("correct","wrong");
+    btnS.classList.remove("correct","wrong");
+
+    if(tfSelected[i] === ans){
+
+      // 🔥 CHỈ CỘNG NẾU CHƯA ĐƯỢC TÍNH TRƯỚC ĐÓ
+    if(!tfCorrectState[current][i]){
+  newlyCorrect++;
+  tfCorrectState[current][i] = true;
+}
+
+      if(ans){
+        btnD.classList.add("correct");
+      }else{
+        btnS.classList.add("correct");
+      }
+
+    }else{
+
+      if(tfSelected[i] !== null){
+   score -= 5; //
+        if(tfSelected[i]){
+          btnD.classList.add("wrong");
+        }else{
+          btnS.classList.add("wrong");
+        }
+
+        setTimeout(()=>{
+          btnD.classList.remove("wrong");
+          btnS.classList.remove("wrong");
+        },500);
+      }
+    }
+  });
+
+  // 🔥 CHỈ CỘNG PHẦN MỚI
+  score += newlyCorrect * 5;
+
+  // 🔥 nếu đủ 4 ý đúng → tính là hoàn thành câu
+if(tfCorrectState[current].every(v => v === true)){
+  if(questionState[current] !== "correct"){
+    correctCount++;
+    questionState[current] = "correct";
+    confetti();
+  }
+}
+
+  updateScore();
+  saveProgress();
+}
+  if(q.type==="short"){
+
+   let val = shortInput.value.trim().toLowerCase();
+
+// 🔥 chuẩn hóa dấu
+val = val.replace(",", ".");
+
+let correct = q.a.toLowerCase();
+
+if(val === correct){
+
+      correctCount++;
+      questionState[current]="correct";
+      score+=20;
+
+      shortInput.style.background="green";
+      confetti();
+
+    }else{
+      score-=5;
+      shortInput.style.background="red";
+
+      setTimeout(()=>{
+        shortInput.value="";
+        shortInput.style.background="";
+      },500);
+    }
+  }
+
+  updateScore();
+  updateXP();
+  renderNav();
+  saveBest(); // 🔥 THÊM DÒNG NÀY
+
+ if(correctCount === questions.length){
+  saveFirstCompletion();
+  document.getElementById("openCertBtn").style.display = "inline-block";
+
+  setTimeout(()=>{
+    showCertificate();
+  },500);
+}}
+
+/* HINT */
+function showHint(){
+
+  if(questionState[current]==="correct") return;
+
+  const q = questions[current];
+
+  score -= 15;
+  updateScore();
+
+  // SINGLE
+  if(q.type==="single"){
+    let correct = q.a;
+    options.children[correct].classList.add("correct");
+
+    setTimeout(()=>{
+      options.children[correct].classList.remove("correct");
+    },1000);
+  }
+
+  // TRUE FALSE
+ if(q.type==="truefalse"){
+  q.a.forEach((ans,i)=>{
+    const {btnD, btnS} = tfButtons[i];
+
+    if(ans){
+      btnD.classList.add("correct");
+    }else{
+      btnS.classList.add("correct");
+    }
+  });
+
+  setTimeout(()=>{
+    tfButtons.forEach(({btnD,btnS})=>{
+      btnD.classList.remove("correct");
+      btnS.classList.remove("correct");
+    });
+  },1000);
+}
+
+  // SHORT
+  if(q.type==="short"){
+    shortInput.value = q.a;
+    shortInput.style.background="green";
+
+    setTimeout(()=>{
+      shortInput.value="";
+      shortInput.style.background="";
+    },1000);
+  }
+
+  saveProgress();
+  saveToCloud();
+}
+
+/* RESET */
+function resetLesson(){
+  questionState = {};
+  correctCount = 0;
+  score = 150;
+
+ tfCorrectState = {}; // 🔥 THÊM DÒNG NÀY
+  tfSelected = [];     // 🔥 (nên thêm luôn)
+
+  localStorage.removeItem(progressKey);
+
+  updateScore();
+  updateXP();
+  loadQuestion();
+}
+
+/* BACK */
+function goBack(){
+  saveBest();
+  saveToCloud();
+  window.location.href="../courses.html";
+}
+
+/* INIT */
+await loadFromCloud();
+loadProgress();
+updateScore();
+updateXP();
+loadQuestion();
+saveBest();
+  await loadUsername();
+renderCertificate();
+if(correctCount === questions.length){
+
+  saveFirstCompletion();
+
+  document.getElementById("openCertBtn").style.display = "inline-block";
+
+  // 🔥 CHECK FIREBASE → ĐÃ MINT CHƯA
+  const snap = await getDoc(doc(db,"users",userId,"lessons",lessonId));
+
+  if(snap.exists() && snap.data().minted){
+    const btn = document.getElementById("mintBtn");
+
+    if(btn){
+      btn.innerText = "✅ Minted";
+      btn.disabled = true;
+    }
+  }
+}
+window.checkAnswer = checkAnswer;
+window.showHint = showHint;
+window.goBack = goBack;
+window.resetLesson = resetLesson;
+  window.mintNFT = mintNFT;
+function getRank(score){
+
+  if(score >= 420) return "gold";
+  if(score >= 360) return "silver";
+  return "bronze";
+}
+const certificatePreview = document.getElementById("certificatePreview");
+async function renderCertificate(){
+  const snap = await getDoc(doc(db,"users",userId,"lessons",lessonId));
+  let finalScore = score;
+  if(snap.exists() && snap.data().firstScore){
+    finalScore = snap.data().firstScore;
+  }
+  const finalRank = getRank(finalScore);
+  certificatePreview.innerHTML = `
+    <div class="certificate cert-${finalRank}">
+      <h3>HACKCHEM CERTIFICATE</h3>
+      <p>Chứng nhận rằng</p>
+      <h2>${username}</h2>
+      <p>đã hoàn thành bài học</p>
+      <h3>${lessonName}</h3>
+      <p>Score: <b>${finalScore}</b></p>
+      <p>Rank: <b>${finalRank.toUpperCase()}</b></p>
+    </div>
+  `;
+}
+  window.closeModal = function(){
+  document.getElementById("certModal").style.display = "none";
+}
+ window.showCertificate = function(){
+  renderCertificate();
+  document.getElementById("certModal").style.display = "flex";
+}
+  async function mintNFT(){
+
+  const btn = document.getElementById("mintBtn");
+
+  try{
+
+    btn.innerText = "⏳ Đang tạo chứng chỉ...";
+    btn.disabled = true;
+
+    const imageFile = await generateImage();
+
+    btn.innerText = "📤 Đang upload ảnh...";
+    const imageCID = await uploadToIPFS(imageFile);
+
+    btn.innerText = "🧾 Đang tạo metadata...";
+    const metadata = await createMetadata(imageCID);
+
+    const metadataCID = await uploadMetadata(metadata);
+
+    const tokenURI = `https://gateway.pinata.cloud/ipfs/${metadataCID}`;
+
+    // 🔥 WALLET
+    if(!window.ethereum){
+      btn.innerText = "❌ Cần MetaMask";
+      return;
+    }
+
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+
+    const signer = await provider.getSigner();
+    const userAddress = await signer.getAddress();
+
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+// 🔒 CHECK ONCHAIN (QUAN TRỌNG)
+const alreadyMinted = await contract.hasMinted(userAddress, lessonId);
+
+if(alreadyMinted){
+  btn.innerText = "✅ Đã mint rồi";
+  return;
+}
+    // 🔒 Firebase check
+    const snap = await getDoc(doc(db,"users",userId,"lessons",lessonId));
+
+    if(!snap.exists() || !snap.data().firstScore){
+      btn.innerText = "❌ Chưa hoàn thành bài";
+      return;
+    }
+
+    // 🔒 CHECK FIREBASE minted (NEW)
+    if(snap.data().minted){
+      btn.innerText = "✅ Đã mint rồi";
+      return;
+    }
+
+    btn.innerText = "🦊 Xác nhận trên MetaMask...";
+
+    const tx = await contract.mint(tokenURI, lessonId);
+
+    btn.innerText = "⛓ Đang xử lý giao dịch...";
+    await tx.wait();
+
+   btn.innerText = "✅ Minted";
+btn.disabled = true; // 🔥 KHÓA NÚT
+document.getElementById("openCertBtn").innerText = "🏆 Xem chứng chỉ"; // 🔥 UX đẹp hơn
+
+    await setDoc(doc(db,"users",userId,"lessons",lessonId),{
+      minted: true
+    }, { merge:true });
+
+  }catch(err){
+    console.error(err);
+    btn.innerText = "❌ Lỗi - thử lại";
+    btn.disabled = false;
+  }
+}
+window.outsideClose = function(e){
+  if(e.target.id === "certModal"){
+    closeModal();
+  }
+}
+</script>
+<!-- CERTIFICATE MODAL -->
+<div id="certModal" onclick="outsideClose(event)"
+  style="
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.7);
+  z-index:999;
+  justify-content:center;
+  align-items:center;
+">
+
+ <div style="
+  background:white;
+  padding:20px;
+  border-radius:12px;
+  width:600px;
+  max-width:90%;
+  text-align:center;
+  position:relative;
+">
+<button onclick="closeModal()" style="
+  position:absolute;
+  top:10px;
+  right:10px;
+  border:none;
+  background:#ff4d4f;
+  color:white;
+  border-radius:50%;
+  width:30px;
+  height:30px;
+  cursor:pointer;
+  font-weight:bold;
+">
+  ✕
+</button>
+    <h2>🎉 Chúc mừng!</h2>
+
+    <div id="certificatePreview" style="margin:20px 0;"></div>
+
+    <button id="mintBtn" onclick="mintNFT()" style="padding:12px 20px; font-size:16px;">
+      🚀 Mint NFT
+    </button>
+
+  </div>
+</div>
+</body>
+</html>
