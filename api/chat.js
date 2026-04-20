@@ -1,8 +1,58 @@
-import { safeJsonParse, extractJsonBlock, isValidQuizPayload } from "./chatValidation.js";
-
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const REQUEST_TIMEOUT_MS = 15000;
 const MAX_RETRIES = 1;
+
+function safeJsonParse(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function extractJsonBlock(text) {
+  if (typeof text !== "string") return null;
+  const codeBlock = text.match(/```json\s*([\s\S]*?)\s*```/i);
+  if (codeBlock?.[1]) return codeBlock[1].trim();
+
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return text.slice(firstBrace, lastBrace + 1);
+  }
+  return null;
+}
+
+function isValidQuizPayload(payload) {
+  if (!payload || typeof payload !== "object") return false;
+  const options = payload.options;
+  const answer = payload.answer;
+
+  if (typeof payload.question !== "string" || !payload.question.trim()) return false;
+  if (typeof payload.explanation !== "string" || !payload.explanation.trim()) return false;
+  if (!options || typeof options !== "object") return false;
+
+  const required = ["A", "B", "C", "D"];
+  const hasOptions = required.every((k) => typeof options[k] === "string" && options[k].trim());
+  if (!hasOptions) return false;
+  if (!required.includes(answer)) return false;
+
+  return true;
+}
+
+function getSafeQuizFallback() {
+  return {
+    question: "Hệ thống đang bận, vui lòng thử lại.",
+    options: {
+      A: "Thử lại sau 10 giây",
+      B: "Kiểm tra kết nối mạng",
+      C: "Đổi chủ đề câu hỏi",
+      D: "Tất cả đều đúng"
+    },
+    answer: "D",
+    explanation: "Phản hồi AI chưa hợp lệ hoặc upstream đang lỗi nên đã dùng fallback an toàn."
+  };
+}
 
 async function fetchCompletionWithRetry(payload, retries = MAX_RETRIES) {
   let attempt = 0;
@@ -140,7 +190,24 @@ $$C_2H_4 + Br_2 → C_2H_4Br_2$$
       messages
     });
 
-    const data = await response.json();
+    const rawBody = await response.text();
+    const data = safeJsonParse(rawBody);
+
+    if (!data) {
+      console.error("OPENAI NON_JSON RESPONSE:", rawBody?.slice(0, 500));
+      if (isQuiz) {
+        return res.status(502).json({ reply: JSON.stringify(getSafeQuizFallback()) });
+      }
+      return res.status(502).json({ reply: "AI tạm thời lỗi upstream, vui lòng thử lại." });
+    }
+
+    if (!response.ok) {
+      console.error("OPENAI ERROR RESPONSE:", data);
+      if (isQuiz) {
+        return res.status(502).json({ reply: JSON.stringify(getSafeQuizFallback()) });
+      }
+      return res.status(502).json({ reply: "AI tạm thời lỗi upstream, vui lòng thử lại." });
+    }
 
     console.log("DATA:", data);
 
@@ -152,17 +219,7 @@ $$C_2H_4 + Br_2 → C_2H_4Br_2$$
 
       if (!isValidQuizPayload(parsed)) {
         return res.status(502).json({
-          reply: JSON.stringify({
-            question: "Hệ thống đang bận, vui lòng thử lại.",
-            options: {
-              A: "Thử lại sau 10 giây",
-              B: "Kiểm tra kết nối mạng",
-              C: "Đổi chủ đề câu hỏi",
-              D: "Tất cả đều đúng"
-            },
-            answer: "D",
-            explanation: "Phản hồi AI chưa đúng schema quiz nên đã dùng fallback an toàn."
-          })
+          reply: JSON.stringify(getSafeQuizFallback())
         });
       }
 
