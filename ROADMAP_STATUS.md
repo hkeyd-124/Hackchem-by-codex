@@ -21,7 +21,9 @@
 - Thiết lập contract tests cho các helper thuần:
   - `userSchema` patch/default behavior.
   - `api/chatValidation` parse/extract/schema-validation behavior.
+  - `pointsService` reward/check-in behavior.
+  - `lessonProgressService` key migration/rank thresholds.
 
 ## 🎯 Mục tiêu sau đó
-- Thêm test cho `pointsService` và `lessonProgressService` (cần expose/import strategy).
 - Chạy migration `backfillUserSchema` ở dry-run trước, log kết quả, rồi mới apply thật.
+- Bổ sung smoke test cho các luồng chính: login email, check-in, save lesson progress.
