@@ -5,6 +5,8 @@
 <title>Lesson</title>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.10.0/dist/ethers.umd.min.js"></script>
+<script src="../sessionService.js"></script>
+<script src="../lessonProgressService.js"></script>
 <style>
 body { margin:0; font-family:Arial; }
 
@@ -182,10 +184,23 @@ async function loadUsername(){
     username = snap.data().name || "User";
   }
 }
-const wallet = localStorage.getItem("wallet") || "guest";
-
-const progressKey = "progress_" + lessonId + "_" + wallet;
-const bestKey = "best_" + lessonId + "_" + wallet;
+const identity = window.sessionService.getCurrentIdentity();
+const uid = identity.uid || identity.wallet || "guest";
+const wallet = identity.wallet || "guest";
+const lessonStorageKeys = window.lessonProgressService.buildLessonStorageKeys({
+  lessonId,
+  uid,
+  wallet,
+  sessionService: window.sessionService
+});
+const progressKey = lessonStorageKeys.progressKey;
+const bestKey = lessonStorageKeys.bestKey;
+window.lessonProgressService.migrateLegacyLessonKeys({
+  oldProgressKey: lessonStorageKeys.oldProgressKey,
+  progressKey,
+  oldBestKey: lessonStorageKeys.oldBestKey,
+  bestKey
+});
 
 /* STATE */
 let score = 150;
@@ -959,12 +974,7 @@ window.showHint = showHint;
 window.goBack = goBack;
 window.resetLesson = resetLesson;
   window.mintNFT = mintNFT;
-function getRank(score){
-
-  if(score >= 420) return "gold";
-  if(score >= 360) return "silver";
-  return "bronze";
-}
+const getRank = window.lessonProgressService.getRank;
 const certificatePreview = document.getElementById("certificatePreview");
 async function renderCertificate(){
   const snap = await getDoc(doc(db,"users",userId,"lessons",lessonId));
