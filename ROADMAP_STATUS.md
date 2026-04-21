@@ -27,3 +27,4 @@
 ## 🎯 Mục tiêu sau đó
 - Chạy migration `backfillUserSchema` ở dry-run trước, log kết quả, rồi mới apply thật.
 - Bổ sung smoke test cho các luồng chính: login email, check-in, save lesson progress.
+- Mở rộng smoke test cho `api/chat` handler với các case upstream lỗi 502 HTML.
