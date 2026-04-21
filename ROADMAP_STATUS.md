@@ -30,3 +30,4 @@
 - Mở rộng smoke test cho `api/chat` handler với các case upstream lỗi 502 HTML.
 - Mở rộng smoke test cho `sessionService` (ưu tiên uid/wallet fallback, scoped key, clear helpers).
 - Tách phần lập kế hoạch patch migration thành pure-core để test độc lập trước khi chạy thật.
+- Tách runner migration để test được dry-run/apply behavior trước khi chạy trên Firestore thật.

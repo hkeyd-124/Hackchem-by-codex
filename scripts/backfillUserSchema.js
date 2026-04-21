@@ -1,30 +1,30 @@
 import { db } from "../firebase.js";
 import {
   collection,
-  getDocs,
+  getDocs as getDocsFs,
   doc,
-  updateDoc
+  updateDoc as updateDocFs
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { planUserSchemaBackfill } from "./backfillUserSchemaCore.js";
+import { runBackfillWithData } from "./backfillUserSchemaRunner.js";
 
-export async function backfillUserSchema({ dryRun = true } = {}) {
-  const usersSnap = await getDocs(collection(db, "users"));
+export async function backfillUserSchema({ dryRun = true, deps = {} } = {}) {
+  const firestoreDb = deps.db || db;
+  const getDocsFn = deps.getDocs || getDocsFs;
+  const updateDocFn = deps.updateDoc || updateDocFs;
+  const collectionFn = deps.collection || collection;
+  const docFn = deps.doc || doc;
+
+  const usersSnap = await getDocsFn(collectionFn(firestoreDb, "users"));
   const users = usersSnap.docs.map((userDoc) => ({
     id: userDoc.id,
     data: userDoc.data()
   }));
 
-  const plan = planUserSchemaBackfill(users);
-
-  if (!dryRun) {
-    for (const entry of plan.logs) {
-      await updateDoc(doc(db, "users", entry.uid), entry.patch);
-    }
-  }
-
-  return {
-    runAt: new Date().toISOString(),
+  return runBackfillWithData({
+    users,
     dryRun,
-    ...plan
-  };
+    updateUser: async (uid, patch) => {
+      await updateDocFn(docFn(firestoreDb, "users", uid), patch);
+    }
+  });
 }
