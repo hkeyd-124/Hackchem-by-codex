@@ -14,6 +14,7 @@ from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { db } from "./firebase.js";
 import { getUserByEmail, createUser } from "./userService.js";
 import { app } from "./firebase.js";
+import { normalizeEmail } from "./userSchema.js";
 
 const auth = getAuth(app);
 
@@ -21,7 +22,11 @@ const auth = getAuth(app);
 // 🔥 LOGIN / REGISTER EMAIL
 // ============================
 export async function loginWithEmail(email, password){
-email = email.trim().toLowerCase();
+email = normalizeEmail(email);
+  if (!email) {
+    alert("Email không hợp lệ!");
+    return null;
+  }
   let userCredential;
 
   // ============================
@@ -99,7 +104,7 @@ if(snap.exists()){
   // ============================
   // 🔥 STEP 4: LƯU LOCAL
   // ============================
-  localStorage.setItem("uid", uid);
+  window.sessionService.setCurrentUid(uid);
 
   // ❗ KHÔNG set wallet ở đây
   // ❗ KHÔNG link tự động
