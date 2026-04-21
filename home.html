@@ -1423,7 +1423,7 @@ const ref = doc(db,"users",uid)
     if(uploadType==="cover"){
       coverImg.src = base64
       await setDoc(ref,{cover:base64},{merge:true})
-    }
+    }    
 
     fileInput.value = ""
   }
