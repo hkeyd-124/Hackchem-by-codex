@@ -615,10 +615,7 @@ function closeAIChat(){
 }
 document.addEventListener("DOMContentLoaded", ()=>{
   renderMathInElement(document.body, {
-  delimiters: [
-    {left: "$$", right: "$$", display: true},
-    {left: "$", right: "$", display: false}
-  ]
+  delimiters: MATH_DELIMITERS
 });
   document.getElementById("aiInput").addEventListener("keypress", function(e){
     if(e.key === "Enter"){
@@ -630,7 +627,20 @@ document.addEventListener("DOMContentLoaded", ()=>{
 function normalize(text){
   return text.toLowerCase().replace(/[^\w\s]/g,"").trim();
 }
+const MATH_DELIMITERS = [
+  {left: "$$", right: "$$", display: true},
+  {left: "$", right: "$", display: false},
+  {left: "\\(", right: "\\)", display: false},
+  {left: "\\[", right: "\\]", display: true}
+];
+function normalizeMathDelimiters(text){
+  if(typeof text !== "string") return "";
+  return text
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, expr)=>`$${expr}$`)
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, expr)=>`$$${expr}$$`);
+}
 function formatAIResponse(text){
+  text = normalizeMathDelimiters(text);
 
   // 🔥 1. Tách LaTeX ra trước
   const latexBlocks = [];
@@ -729,10 +739,7 @@ box.appendChild(msgDiv)
 
 // 🔥 render chỉ phần mới
 renderMathInElement(msgDiv, {
-  delimiters: [
-    {left: "$$", right: "$$", display: true},
-    {left: "$", right: "$", display: false}
-  ]
+  delimiters: MATH_DELIMITERS
 });
   inputEl.value = "";
   box.scrollTop = box.scrollHeight;
@@ -1050,17 +1057,11 @@ try{
 
   // ✅ FIX 3: render KaTeX toàn bộ
   renderMathInElement(qBox, {
-    delimiters: [
-      {left: "$$", right: "$$", display: true},
-      {left: "$", right: "$", display: false}
-    ]
+    delimiters: MATH_DELIMITERS
   });
 
   renderMathInElement(optBox, {
-    delimiters: [
-      {left: "$$", right: "$$", display: true},
-      {left: "$", right: "$", display: false}
-    ]
+    delimiters: MATH_DELIMITERS
   });
 }
   function checkAIAnswer(q, selected){
@@ -1092,10 +1093,7 @@ options.forEach(o => {
   result.innerHTML = html;
 
   renderMathInElement(result, {
-    delimiters: [
-      {left: "$$", right: "$$", display: true},
-      {left: "$", right: "$", display: false}
-    ]
+    delimiters: MATH_DELIMITERS
   });
 }
 </script>
