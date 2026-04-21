@@ -5,30 +5,26 @@ import {
   doc,
   updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { buildSchemaPatch } from "../userSchema.js";
+import { planUserSchemaBackfill } from "./backfillUserSchemaCore.js";
 
 export async function backfillUserSchema({ dryRun = true } = {}) {
   const usersSnap = await getDocs(collection(db, "users"));
-  const logs = [];
+  const users = usersSnap.docs.map((userDoc) => ({
+    id: userDoc.id,
+    data: userDoc.data()
+  }));
 
-  for (const userDoc of usersSnap.docs) {
-    const userData = userDoc.data();
-    const patch = buildSchemaPatch(userData);
-    const patchKeys = Object.keys(patch);
+  const plan = planUserSchemaBackfill(users);
 
-    if (patchKeys.length === 0) continue;
-
-    logs.push({ uid: userDoc.id, patch });
-
-    if (!dryRun) {
-      await updateDoc(doc(db, "users", userDoc.id), patch);
+  if (!dryRun) {
+    for (const entry of plan.logs) {
+      await updateDoc(doc(db, "users", entry.uid), entry.patch);
     }
   }
 
   return {
+    runAt: new Date().toISOString(),
     dryRun,
-    totalUsers: usersSnap.size,
-    changedUsers: logs.length,
-    logs
+    ...plan
   };
 }
