@@ -1,7 +1,110 @@
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const REQUEST_TIMEOUT_MS = 15000;
+const MAX_RETRIES = 1;
+
+function safeJsonParse(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function extractJsonBlock(text) {
+  if (typeof text !== "string") return null;
+  const codeBlock = text.match(/```json\s*([\s\S]*?)\s*```/i);
+  if (codeBlock?.[1]) return codeBlock[1].trim();
+
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return text.slice(firstBrace, lastBrace + 1);
+  }
+  return null;
+}
+
+function isValidQuizPayload(payload) {
+  if (!payload || typeof payload !== "object") return false;
+  const options = payload.options;
+  const answer = payload.answer;
+
+  if (typeof payload.question !== "string" || !payload.question.trim()) return false;
+  if (typeof payload.explanation !== "string" || !payload.explanation.trim()) return false;
+  if (!options || typeof options !== "object") return false;
+
+  const required = ["A", "B", "C", "D"];
+  const hasOptions = required.every((k) => typeof options[k] === "string" && options[k].trim());
+  if (!hasOptions) return false;
+  if (!required.includes(answer)) return false;
+
+  return true;
+}
+
+function getSafeQuizFallback() {
+  return {
+    question: "Hệ thống đang bận, vui lòng thử lại.",
+    options: {
+      A: "Thử lại sau 10 giây",
+      B: "Kiểm tra kết nối mạng",
+      C: "Đổi chủ đề câu hỏi",
+      D: "Tất cả đều đúng"
+    },
+    answer: "D",
+    explanation: "Phản hồi AI chưa hợp lệ hoặc upstream đang lỗi nên đã dùng fallback an toàn."
+  };
+}
+
+async function fetchCompletionWithRetry(payload, retries = MAX_RETRIES) {
+  let attempt = 0;
+  let lastError;
+
+  while (attempt <= retries) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(OPENAI_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok && response.status >= 500 && attempt < retries) {
+        attempt += 1;
+        continue;
+      }
+
+      return response;
+    } catch (err) {
+      clearTimeout(timeoutId);
+      lastError = err;
+      if (attempt >= retries) throw err;
+      attempt += 1;
+    }
+  }
+
+  throw lastError || new Error("OpenAI request failed");
+}
+
 export default async function handler(req, res) {
   try {
-    const { message } = req.body;
-    const isQuiz = req.body.mode === "quiz";
+    if (req.method !== "POST") {
+      return res.status(405).json({ reply: "Method không hợp lệ" });
+    }
+
+    const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+    const mode = req.body?.mode;
+    const isQuiz = mode === "quiz";
+
+    if (!message) {
+      return res.status(400).json({ reply: "Thiếu nội dung câu hỏi" });
+    }
 
     // ✅ TẠO messages TRƯỚC
     const messages = isQuiz
@@ -81,24 +184,47 @@ $$C_2H_4 + Br_2 → C_2H_4Br_2$$
           { role: "user", content: message }
         ];
 
-    // ✅ GỌI API
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages   // ✅ đúng chỗ
-      })
+    // ✅ GỌI API (timeout + retry)
+    const response = await fetchCompletionWithRetry({
+      model: "gpt-4o-mini",
+      messages
     });
 
-    const data = await response.json();
+    const rawBody = await response.text();
+    const data = safeJsonParse(rawBody);
+
+    if (!data) {
+      console.error("OPENAI NON_JSON RESPONSE:", rawBody?.slice(0, 500));
+      if (isQuiz) {
+        return res.status(502).json({ reply: JSON.stringify(getSafeQuizFallback()) });
+      }
+      return res.status(502).json({ reply: "AI tạm thời lỗi upstream, vui lòng thử lại." });
+    }
+
+    if (!response.ok) {
+      console.error("OPENAI ERROR RESPONSE:", data);
+      if (isQuiz) {
+        return res.status(502).json({ reply: JSON.stringify(getSafeQuizFallback()) });
+      }
+      return res.status(502).json({ reply: "AI tạm thời lỗi upstream, vui lòng thử lại." });
+    }
 
     console.log("DATA:", data);
 
     const reply = data.choices?.[0]?.message?.content || "AI chưa trả lời";
+
+    if (isQuiz) {
+      const extracted = extractJsonBlock(reply);
+      const parsed = extracted ? safeJsonParse(extracted) : null;
+
+      if (!isValidQuizPayload(parsed)) {
+        return res.status(502).json({
+          reply: JSON.stringify(getSafeQuizFallback())
+        });
+      }
+
+      return res.status(200).json({ reply: JSON.stringify(parsed) });
+    }
 
     res.status(200).json({ reply });
 
