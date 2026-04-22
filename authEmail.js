@@ -15,6 +15,12 @@ import { db } from "./firebase.js";
 import { getUserByEmail, createUser } from "./userService.js";
 import { app } from "./firebase.js";
 import { normalizeEmail } from "./userSchema.js";
+import {
+  AUTH_ACTIONS,
+  resolveAuthErrorAction,
+  getEmailVerificationResult,
+  isUserBanned
+} from "./authEmailFlow.js";
 
 const auth = getAuth(app);
 
@@ -36,7 +42,7 @@ email = normalizeEmail(email);
     userCredential = await signInWithEmailAndPassword(auth, email, password);
    await userCredential.user.reload();
 
-if(!userCredential.user.emailVerified){
+if(getEmailVerificationResult(userCredential.user.emailVerified) === "NOT_VERIFIED"){
 
   // 🔥 LƯU email tạm để resend
   localStorage.setItem("pending_verify_email", email);
@@ -48,10 +54,8 @@ if(!userCredential.user.emailVerified){
   }catch(err){
 
     // 👉 nếu chưa có tài khoản → tạo mới
-    if(
-      err.code === "auth/user-not-found" ||
-      err.code === "auth/invalid-credential"
-    ){
+    const action = resolveAuthErrorAction(err.code);
+    if(action === AUTH_ACTIONS.CREATE_ACCOUNT){
       userCredential = await createUserWithEmailAndPassword(auth, email, password);
       await sendEmailVerification(userCredential.user);
 
@@ -62,7 +66,7 @@ alert("📩 Email xác nhận đã được gửi, hãy kiểm tra!!");
 
 return "NOT_VERIFIED";
     }
-    else if(err.code === "auth/wrong-password"){
+    else if(action === AUTH_ACTIONS.WRONG_PASSWORD){
       alert("Sai mật khẩu!");
       return null;
     }
@@ -96,7 +100,7 @@ const snap = await getDoc(doc(db, "users", uid));
 if(snap.exists()){
   const data = snap.data();
 
-  if(data.system?.status === "banned"){
+  if(isUserBanned(data)){
     alert("🚫 Tài khoản đã bị khóa!");
     return null;
   }

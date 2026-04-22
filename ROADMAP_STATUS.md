@@ -32,3 +32,4 @@
 - Tách phần lập kế hoạch patch migration thành pure-core để test độc lập trước khi chạy thật.
 - Tách runner migration để test được dry-run/apply behavior trước khi chạy trên Firestore thật.
 - Thêm formatter report để review nhanh kết quả dry-run trước khi apply migration.
+- Bổ sung contract tests cho login-email decision flow (map auth errors, verify-state, banned-state).
