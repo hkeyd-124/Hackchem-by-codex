@@ -566,6 +566,7 @@ h1 {
 <script type="module">
  import { 
   getAuth, 
+  signInAnonymously,
   sendEmailVerification,
   sendPasswordResetEmail
 }
@@ -614,6 +615,9 @@ showLoading();
   }
 
   try {
+    if(!auth.currentUser){
+      await signInAnonymously(auth);
+    }
 
     // 1. CONNECT
     const accounts = await window.ethereum.request({
@@ -626,6 +630,7 @@ const wallet = walletAddress;
 // 🔥 NEW: lấy hoặc tạo UID
 // 🔥 LẤY UID HIỆN TẠI (nếu có)
 let uid = window.sessionService.getUid();
+const authUid = auth.currentUser?.uid || null;
 
 // ============================
 // 🔥 CASE 1: đã login (email trước)
@@ -647,12 +652,12 @@ if(uid){
 // 🔥 CASE 2: chưa login gì
 // ============================
 else{
-
-  uid = await getUserByWallet(wallet);
-
+  uid = authUid;
   if(!uid){
-    uid = await createUser({ wallet });
+    throw new Error("missing-auth-uid");
   }
+
+  await createUser({ wallet, uid });
 
 }
     // 2. CHECK NETWORK (Sepolia)

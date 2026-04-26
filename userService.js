@@ -48,7 +48,7 @@ wallet = normalizeWallet(wallet);
   const uid = providedUid || generateUID();
 
   // 🔥 TẠO USER
-  await setDoc(doc(db, "users", uid), buildDefaultUser({ uid, wallet, email }));
+  await setDoc(doc(db, "users", uid), buildDefaultUser({ uid, wallet, email }), { merge: true });
 
   // 🔥 TẠO INDEX WALLET
   if(wallet){
