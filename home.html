@@ -1099,9 +1099,42 @@ options.forEach(o => {
 </script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, collection, getDocs } 
 from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const sessionIdentity = window.sessionService.getCurrentIdentity();
+const sessionUid = sessionIdentity.uid || null;
+const sessionWallet = sessionIdentity.wallet || null;
+let currentUserDocId = window.sessionService.getStorageUserId();
+
+function isPermissionDeniedError(err){
+  return err?.code === "permission-denied" || err?.code === "firestore/permission-denied";
+}
+
+async function getUserSnapshotWithFallback(){
+  const candidates = [getAuthUid(), currentUserDocId, sessionUid, sessionWallet].filter(Boolean);
+  const tried = new Set();
+
+  for(const candidate of candidates){
+    if(tried.has(candidate)) continue;
+    tried.add(candidate);
+    try{
+      const snap = await getDoc(doc(db, "users", candidate));
+      if(snap.exists()){
+        currentUserDocId = candidate;
+        window.sessionService.setCurrentUid(candidate);
+        return { snap, userId: candidate };
+      }
+    }catch(err){
+      if(!isPermissionDeniedError(err)){
+        throw err;
+      }
+    }
+  }
+
+  return { snap: null, userId: currentUserDocId || sessionUid || sessionWallet || null };
+}
 
 const sessionIdentity = window.sessionService.getCurrentIdentity();
 const sessionUid = sessionIdentity.uid || null;
@@ -1274,7 +1307,9 @@ projectId:"hackchem-90922"
 });
 const db = getFirestore(app);
 const auth = getAuth(app);
-const authUid = auth.currentUser?.uid || null;
+function getAuthUid(){
+  return auth.currentUser?.uid || null;
+}
   
 window.loadLessons = function(){
 
@@ -1379,7 +1414,7 @@ const { snap, userId: resolvedUserId } = await getUserSnapshotWithFallback();
 
 if(!snap){
   document.getElementById("heroName").innerText = "User";
-  walletBox.innerText = walletAddress || "No wallet";
+  walletBox.innerText = "User";
   profileName.innerText = "User";
   pointValue.innerText = "0";
   return;
@@ -1451,7 +1486,7 @@ document.getElementById("progressPercent").innerText = percent + "%"
 // ===== STREAK =====
 document.getElementById("streak").innerText = data.streak || 1
   document.getElementById("heroName").innerText = data.name || "User"
-walletBox.innerText = data.wallet || walletAddress || "No wallet"
+walletBox.innerText = data.name || (data.wallet ? data.wallet.slice(0,6) + "..." + data.wallet.slice(-4) : "User")
 profileName.innerText = data.name || "User"
 if(data.avatar) avatarImg.src=data.avatar
 if(data.cover) coverImg.src=data.cover
@@ -1505,7 +1540,8 @@ if(emailBtn){
 }
  
 window.handleCheckin = async () => {
-  const uid = authUid || currentUserDocId || window.sessionService.getStorageUserId()
+  try{
+  const uid = getAuthUid() || currentUserDocId || window.sessionService.getStorageUserId()
   if(!uid){
     alert("Phiên đăng nhập không hợp lệ, vui lòng đăng nhập lại!");
     return;
@@ -1541,9 +1577,16 @@ window.handleCheckin = async () => {
   window.currentUserStreak = checkinUpdate.nextStreak
   window.currentLastCheckin = checkinUpdate.today
   await loadUser()
+  }catch(err){
+    console.error(err);
+    alert("Check-in thất bại, vui lòng thử lại!");
+  }
 }
   
 window.addEventListener("DOMContentLoaded", loadUser)
+onAuthStateChanged(auth, () => {
+  loadUser();
+});
   let uploadType="avatar"
 
 window.uploadAvatar=()=>{
@@ -1615,7 +1658,7 @@ const ref = doc(db,"users",uid)
   });
 
   const wallet = accounts[0];
-  const uid = authUid || currentUserDocId || window.sessionService.getUid();
+  const uid = getAuthUid() || currentUserDocId || window.sessionService.getUid();
 
   if(!uid){
     alert("Bạn cần đăng nhập trước!");
@@ -1673,7 +1716,7 @@ window.linkEmail = async function(){
     return;
   }
 
-  const uid = authUid || currentUserDocId || window.sessionService.getUid();
+  const uid = getAuthUid() || currentUserDocId || window.sessionService.getUid();
 
   if(!uid){
     alert("Bạn cần đăng nhập trước!");
