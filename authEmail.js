@@ -87,21 +87,46 @@ return "NOT_VERIFIED";
   // ============================
   // 🔥 STEP 2: XÁC ĐỊNH UID ĐÚNG
   // ============================
+  const firebaseUid = userCredential.user.uid;
+  let uid = firebaseUid;
 
-  // ❗ KHÔNG dùng localStorage uid ở đây nữa
-  let uid = await getUserByEmail(email);
+  // Ưu tiên email_index cũ để giữ tương thích, nếu lỗi quyền thì fallback firebase uid
+  try{
+    const mappedUid = await getUserByEmail(email);
+    if(mappedUid) uid = mappedUid;
+  }catch(indexErr){
+    if(indexErr?.code !== "permission-denied" && indexErr?.code !== "firestore/permission-denied"){
+      throw indexErr;
+    }
+  }
 
-  // 👉 nếu email chưa tồn tại trong hệ của bạn → tạo user mới
-  if(!uid){
-    uid = await createUser({ email });
+  // 👉 nếu uid hiện tại chưa có profile trong hệ của bạn → tạo user mới
+  try{
+    const snap = await getDoc(doc(db, "users", uid));
+    if(!snap.exists()){
+      await createUser({ email, uid });
+    }
+  }catch(profileErr){
+    if(profileErr?.code !== "permission-denied" && profileErr?.code !== "firestore/permission-denied"){
+      throw profileErr;
+    }
+    // fallback an toàn theo firebase uid khi rule yêu cầu auth.uid
+    uid = firebaseUid;
+    await createUser({ email, uid });
   }
 
   // ============================
   // 🔥 STEP 3: ĐẢM BẢO INDEX
   // ============================
-  await setDoc(doc(db, "email_index", email), {
-    uid: uid
-  });
+  try{
+    await setDoc(doc(db, "email_index", email), {
+      uid: uid
+    });
+  }catch(indexWriteErr){
+    if(indexWriteErr?.code !== "permission-denied" && indexWriteErr?.code !== "firestore/permission-denied"){
+      throw indexWriteErr;
+    }
+  }
 
 // 🔥 CHECK BAN
 const snap = await getDoc(doc(db, "users", uid));

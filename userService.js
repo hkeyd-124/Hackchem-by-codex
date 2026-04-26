@@ -42,10 +42,10 @@ email = normalizeEmail(email);
 // ============================
 // 🆕 TẠO USER MỚI
 // ============================
-export async function createUser({wallet=null, email=null}){
+export async function createUser({wallet=null, email=null, uid: providedUid=null}){
 wallet = normalizeWallet(wallet);
   email = normalizeEmail(email);
-  const uid = generateUID();
+  const uid = providedUid || generateUID();
 
   // 🔥 TẠO USER
   await setDoc(doc(db, "users", uid), buildDefaultUser({ uid, wallet, email }));
