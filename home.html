@@ -6,6 +6,8 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="./sessionService.js"></script>
+<script src="./pointsService.js"></script>
 <style> 
 body{margin:0;font-family:Arial;display:flex;background:#f5f5f5}
 .sidebar{width:250px;background:#fff;height:100vh;padding:20px;border-right:1px solid #eee}
@@ -482,8 +484,9 @@ padding: 0 10px;
 <input type="file" id="fileInput" accept="image/*" hidden>
 
 <script>
-  let walletAddress = localStorage.getItem("wallet")
-let uid = localStorage.getItem("uid") || walletAddress
+  const initialIdentity = window.sessionService.getCurrentIdentity()
+let walletAddress = initialIdentity.wallet
+let uid = window.sessionService.getStorageUserId()
  function fixChemicalFormula(text){
   return text.replace(
     /(?<!\$)(\b(?:[A-Z][a-z]?\d+)+\b)(?!\$)/g,
@@ -585,12 +588,12 @@ div.style = `
   //LẤY MỤC TIÊU TỪ COURSES//
   function getLessonPercent(id){
 
-  const wallet = localStorage.getItem("wallet") || "guest";
-const uid = localStorage.getItem("uid") || wallet;
+  const identity = window.sessionService.getCurrentIdentity();
+const wallet = identity.wallet || "guest";
+const uid = identity.uid || wallet;
 
-  const data = JSON.parse(
-    localStorage.getItem("progress_" + id + "_" + uid)
-  );
+  const progressKey = window.sessionService.buildScopedKey("progress", id, uid);
+  const data = JSON.parse(localStorage.getItem(progressKey));
 
   if(!data) return 0;
 
@@ -612,10 +615,7 @@ function closeAIChat(){
 }
 document.addEventListener("DOMContentLoaded", ()=>{
   renderMathInElement(document.body, {
-  delimiters: [
-    {left: "$$", right: "$$", display: true},
-    {left: "$", right: "$", display: false}
-  ]
+  delimiters: MATH_DELIMITERS
 });
   document.getElementById("aiInput").addEventListener("keypress", function(e){
     if(e.key === "Enter"){
@@ -627,7 +627,20 @@ document.addEventListener("DOMContentLoaded", ()=>{
 function normalize(text){
   return text.toLowerCase().replace(/[^\w\s]/g,"").trim();
 }
+const MATH_DELIMITERS = [
+  {left: "$$", right: "$$", display: true},
+  {left: "$", right: "$", display: false},
+  {left: "\\(", right: "\\)", display: false},
+  {left: "\\[", right: "\\]", display: true}
+];
+function normalizeMathDelimiters(text){
+  if(typeof text !== "string") return "";
+  return text
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, expr)=>`$${expr}$`)
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, expr)=>`$$${expr}$$`);
+}
 function formatAIResponse(text){
+  text = normalizeMathDelimiters(text);
 
   // 🔥 1. Tách LaTeX ra trước
   const latexBlocks = [];
@@ -650,18 +663,20 @@ function formatAIResponse(text){
 }
 async function sendAI(){
 
-  const user = localStorage.getItem("wallet") || "guest";
+  const user = window.sessionService.getCurrentIdentity().userId;
 
-  let aiCount = parseInt(localStorage.getItem("ai_count_" + user)) || 0;
+  const aiCountKey = "ai_count_" + user;
+  const aiDayKey = "ai_day_" + user;
+  let aiCount = parseInt(localStorage.getItem(aiCountKey)) || 0;
 
   const today = new Date().toDateString();
-  const lastDay = localStorage.getItem("ai_day_" + user);
+  const lastDay = localStorage.getItem(aiDayKey);
 
   // ✅ reset đúng cách (KHÔNG phá hệ thống)
   if (lastDay !== today) {
     aiCount = 0;
-    localStorage.setItem("ai_day_" + user, today);
-    localStorage.setItem("ai_count_" + user, aiCount);
+    localStorage.setItem(aiDayKey, today);
+    localStorage.setItem(aiCountKey, aiCount);
   }
 
   const inputEl = document.getElementById("aiInput");
@@ -709,7 +724,7 @@ async function sendAI(){
 
       // ✅ chỉ tăng khi gọi API
       aiCount++;
-      localStorage.setItem("ai_count_" + user, aiCount);
+      localStorage.setItem(aiCountKey, aiCount);
 
     }catch(e){
       reply = "⚠️ Lỗi kết nối server";
@@ -724,10 +739,7 @@ box.appendChild(msgDiv)
 
 // 🔥 render chỉ phần mới
 renderMathInElement(msgDiv, {
-  delimiters: [
-    {left: "$$", right: "$$", display: true},
-    {left: "$", right: "$", display: false}
-  ]
+  delimiters: MATH_DELIMITERS
 });
   inputEl.value = "";
   box.scrollTop = box.scrollHeight;
@@ -771,35 +783,9 @@ function openCheckin(){
 function closeCheckin(){
   document.getElementById("checkinModal").classList.add("hidden")
 }
-  function getReward(streak){
-  if(streak === 1) return 1
-  if(streak === 2) return 2
-  if(streak === 3) return 3
-  if(streak === 4) return 4
-  if(streak <= 9) return 5
-  return 10
-}
-  /* 🔥 GIỮ NGUYÊN CODE CŨ */
-  function getVNDate(){
-  return new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
-  )
-}
-  function formatDate(date){
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-function getTodayKey(){
-  const vn = getVNDate()
-  return formatDate(vn)
-}
-function getYesterdayKey(){
-  const vn = getVNDate()
-  vn.setDate(vn.getDate() - 1)
-  return formatDate(vn)
-}
+const getReward = window.pointsService.getReward;
+const getTodayKey = window.pointsService.getTodayKey;
+const getYesterdayKey = window.pointsService.getYesterdayKey;
   function renderCheckinDays(){
 const streak = window.currentUserStreak || 0
 
@@ -1071,17 +1057,11 @@ try{
 
   // ✅ FIX 3: render KaTeX toàn bộ
   renderMathInElement(qBox, {
-    delimiters: [
-      {left: "$$", right: "$$", display: true},
-      {left: "$", right: "$", display: false}
-    ]
+    delimiters: MATH_DELIMITERS
   });
 
   renderMathInElement(optBox, {
-    delimiters: [
-      {left: "$$", right: "$$", display: true},
-      {left: "$", right: "$", display: false}
-    ]
+    delimiters: MATH_DELIMITERS
   });
 }
   function checkAIAnswer(q, selected){
@@ -1113,23 +1093,56 @@ options.forEach(o => {
   result.innerHTML = html;
 
   renderMathInElement(result, {
-    delimiters: [
-      {left: "$$", right: "$$", display: true},
-      {left: "$", right: "$", display: false}
-    ]
+    delimiters: MATH_DELIMITERS
   });
 }
 </script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, collection, getDocs } 
 from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const sessionIdentity = window.sessionService.getCurrentIdentity();
+const sessionUid = sessionIdentity.uid || null;
+const sessionWallet = sessionIdentity.wallet || null;
+let currentUserDocId = window.sessionService.getStorageUserId();
+
+function isPermissionDeniedError(err){
+  return err?.code === "permission-denied" || err?.code === "firestore/permission-denied";
+}
+
+async function getUserSnapshotWithFallback(){
+  const candidates = [authUid, currentUserDocId, sessionUid, sessionWallet].filter(Boolean);
+  const tried = new Set();
+
+  for(const candidate of candidates){
+    if(tried.has(candidate)) continue;
+    tried.add(candidate);
+    try{
+      const snap = await getDoc(doc(db, "users", candidate));
+      if(snap.exists()){
+        currentUserDocId = candidate;
+        window.sessionService.setCurrentUid(candidate);
+        return { snap, userId: candidate };
+      }
+    }catch(err){
+      if(!isPermissionDeniedError(err)){
+        throw err;
+      }
+    }
+  }
+
+  return { snap: null, userId: currentUserDocId || sessionUid || sessionWallet || null };
+}
 
 const app = initializeApp({
 apiKey:"AIzaSyCO3BvrQ0GAmIebCwueVd88Do1YGk_iYJo",
 projectId:"hackchem-90922"
 });
 const db = getFirestore(app);
+const auth = getAuth(app);
+const authUid = auth.currentUser?.uid || null;
   
 window.loadLessons = function(){
 
@@ -1203,7 +1216,7 @@ window.loadLeaderboard = async function(){
     const div=document.createElement("div")
     div.className="lb-row"
 
-    if(u.id===uid || u.id===walletAddress){
+    if(u.id===sessionUid || u.id===sessionWallet){
       div.style.border="2px solid gold"
     }
 
@@ -1221,17 +1234,25 @@ window.loadLeaderboard = async function(){
 }
 
 async function loadUser(){
-const walletAddress = localStorage.getItem("wallet")
-const uid = localStorage.getItem("uid")
+const walletAddress = sessionWallet
+const uid = sessionUid
 
-const userId = uid ? uid : walletAddress;
+const userId = currentUserDocId || sessionUid || sessionWallet;
 
 if(!userId){
   window.location.href="index.html";
   return;
 }
-let ref = doc(db,"users",userId)
-let snap = await getDoc(ref)
+const { snap, userId: resolvedUserId } = await getUserSnapshotWithFallback();
+
+if(!snap){
+  document.getElementById("heroName").innerText = "User";
+  walletBox.innerText = walletAddress || "No wallet";
+  profileName.innerText = "User";
+  pointValue.innerText = "0";
+  return;
+}
+
 if(snap.exists()){
   const data = snap.data();
 
@@ -1242,11 +1263,6 @@ if(snap.exists()){
     window.location.href = "index.html";
     return;
   }
-}
-if(!snap.exists()){
-  // 🔥 fallback user cũ
-  ref = doc(db,"users",walletAddress)
-  snap = await getDoc(ref)
 }
 if(snap.exists()){
 const data=snap.data()
@@ -1281,9 +1297,8 @@ let totalCorrect = 0
 
 lessons.forEach(id => {
 
-  const data = JSON.parse(
-    localStorage.getItem("progress_" + id + "_" + uid)
-  )
+  const progressKey = window.sessionService.buildScopedKey("progress", id, resolvedUserId || uid)
+  const data = JSON.parse(localStorage.getItem(progressKey))
 
   const total = totals[id]
   totalQuestions += total
@@ -1304,7 +1319,7 @@ document.getElementById("progressPercent").innerText = percent + "%"
 // ===== STREAK =====
 document.getElementById("streak").innerText = data.streak || 1
   document.getElementById("heroName").innerText = data.name || "User"
-walletBox.innerText = data.name || walletAddress
+walletBox.innerText = data.wallet || walletAddress || "No wallet"
 profileName.innerText = data.name || "User"
 if(data.avatar) avatarImg.src=data.avatar
 if(data.cover) coverImg.src=data.cover
@@ -1358,45 +1373,41 @@ if(emailBtn){
 }
  
 window.handleCheckin = async () => {
-  const walletAddress = localStorage.getItem("wallet")
-  const uid = localStorage.getItem("uid") || walletAddress
+  const uid = authUid || currentUserDocId || window.sessionService.getStorageUserId()
+  if(!uid){
+    alert("Phiên đăng nhập không hợp lệ, vui lòng đăng nhập lại!");
+    return;
+  }
   const ref = doc(db,"users",uid)
   const snap = await getDoc(ref)
 
   let data = snap.exists() ? snap.data() : {}
 
-  const today = getTodayKey()
-  const yesterday = getYesterdayKey()
-  const last = data.lastCheckin || ""
+  const checkinUpdate = window.pointsService.buildCheckinUpdate({
+    points: data.points || 0,
+    streak: data.streak || 0,
+    lastCheckin: data.lastCheckin || ""
+  });
 
-  console.log("LAST:", last || "null")
-  console.log("YESTERDAY:", yesterday)
-  console.log("TODAY:", today)
+  console.log("LAST:", data.lastCheckin || "null")
+  console.log("YESTERDAY:", checkinUpdate.yesterday)
+  console.log("TODAY:", checkinUpdate.today)
 
   // 🚫 đã check hôm nay
-  if(last === today){
+  if(!checkinUpdate.canCheckin){
     alert("Bạn đã check-in hôm nay rồi!")
     return
   }
-  let streak = 1
-  // 🔥 nếu check liên tiếp
-  if(last === yesterday){
-    streak = (data.streak || 0) + 1
-  }
-  // ❌ nếu bỏ ngày → reset về 1
-  else{
-    streak = 1
-  }
-  const reward = getReward(streak)
+
   await setDoc(ref,{
-    points: (data.points || 0) + reward,
-    streak: streak,
-    lastCheckin: today
+    points: checkinUpdate.nextPoints,
+    streak: checkinUpdate.nextStreak,
+    lastCheckin: checkinUpdate.today
   },{merge:true})
-  flyPoints(reward)
-  showReward(reward)
-  window.currentUserStreak = streak
-  window.currentLastCheckin = today
+  flyPoints(checkinUpdate.reward)
+  showReward(checkinUpdate.reward)
+  window.currentUserStreak = checkinUpdate.nextStreak
+  window.currentLastCheckin = checkinUpdate.today
   await loadUser()
 }
   
@@ -1441,8 +1452,7 @@ fileInput.onchange=async(e)=>{
     // 🔥 nén ảnh (0.7 = giảm dung lượng)
     const base64 = canvas.toDataURL("image/jpeg", 0.96)
 
-    const wallet = localStorage.getItem("wallet")
-const uid = localStorage.getItem("uid") || wallet
+const uid = window.sessionService.getStorageUserId()
 const ref = doc(db,"users",uid)
 
     if(uploadType==="avatar"){
@@ -1473,7 +1483,7 @@ const ref = doc(db,"users",uid)
   });
 
   const wallet = accounts[0];
-  const uid = localStorage.getItem("uid");
+  const uid = authUid || currentUserDocId || window.sessionService.getUid();
 
   if(!uid){
     alert("Bạn cần đăng nhập trước!");
@@ -1505,7 +1515,7 @@ const ref = doc(db,"users",uid)
     uid: uid
   });
 
-  localStorage.setItem("wallet", wallet);
+  window.sessionService.setCurrentWallet(wallet);
 
   alert("✅ Đã kết nối ví!");
 
@@ -1531,7 +1541,7 @@ window.linkEmail = async function(){
     return;
   }
 
-  const uid = localStorage.getItem("uid");
+  const uid = authUid || currentUserDocId || window.sessionService.getUid();
 
   if(!uid){
     alert("Bạn cần đăng nhập trước!");
