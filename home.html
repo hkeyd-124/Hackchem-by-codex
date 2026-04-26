@@ -1135,6 +1135,39 @@ async function getUserSnapshotWithFallback(){
   return { snap: null, userId: currentUserDocId || sessionUid || sessionWallet || null };
 }
 
+const identity = window.sessionService.getCurrentIdentity();
+const sessionUid = identity.uid || null;
+const sessionWallet = identity.wallet || null;
+let currentUserDocId = window.sessionService.getStorageUserId();
+
+function isPermissionDeniedError(err){
+  return err?.code === "permission-denied" || err?.code === "firestore/permission-denied";
+}
+
+async function getUserSnapshotWithFallback(){
+  const candidates = [currentUserDocId, sessionUid, sessionWallet].filter(Boolean);
+  const tried = new Set();
+
+  for(const candidate of candidates){
+    if(tried.has(candidate)) continue;
+    tried.add(candidate);
+    try{
+      const snap = await getDoc(doc(db, "users", candidate));
+      if(snap.exists()){
+        currentUserDocId = candidate;
+        window.sessionService.setCurrentUid(candidate);
+        return { snap, userId: candidate };
+      }
+    }catch(err){
+      if(!isPermissionDeniedError(err)){
+        throw err;
+      }
+    }
+  }
+
+  return { snap: null, userId: currentUserDocId || sessionUid || sessionWallet || null };
+}
+
 const app = initializeApp({
 apiKey:"AIzaSyCO3BvrQ0GAmIebCwueVd88Do1YGk_iYJo",
 projectId:"hackchem-90922"
@@ -1460,7 +1493,7 @@ const ref = doc(db,"users",uid)
     if(uploadType==="cover"){
       coverImg.src = base64
       await setDoc(ref,{cover:base64},{merge:true})
-    }
+    }    
 
     fileInput.value = ""
   }
