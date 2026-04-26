@@ -33,3 +33,4 @@
 - Tách runner migration để test được dry-run/apply behavior trước khi chạy trên Firestore thật.
 - Thêm formatter report để review nhanh kết quả dry-run trước khi apply migration.
 - Bổ sung contract tests cho login-email decision flow (map auth errors, verify-state, banned-state).
+- Soạn `MIGRATION_RUNBOOK.md` cho quy trình dry-run/apply/rollback trên staging -> production.
