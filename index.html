@@ -653,8 +653,10 @@ if(uid){
 else{
   uid = await getUserByWallet(wallet);
   if(!uid){
-    uid = await createUser({ wallet });
+    throw new Error("missing-auth-uid");
   }
+
+  await createUser({ wallet, uid });
 
 }
     // 2. CHECK NETWORK (Sepolia)
