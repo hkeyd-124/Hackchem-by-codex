@@ -56,8 +56,17 @@ if(getEmailVerificationResult(userCredential.user.emailVerified) === "NOT_VERIFI
     // 👉 nếu chưa có tài khoản → tạo mới
     const action = resolveAuthErrorAction(err.code);
     if(action === AUTH_ACTIONS.CREATE_ACCOUNT){
-      userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      await sendEmailVerification(userCredential.user);
+      try{
+        userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        await sendEmailVerification(userCredential.user);
+      }catch(createErr){
+        // Tài khoản đã tồn tại nhưng credential không hợp lệ → tránh vòng lặp kẹt login
+        if(createErr.code === "auth/email-already-in-use"){
+          alert("Email đã tồn tại, vui lòng kiểm tra lại mật khẩu!");
+          return null;
+        }
+        throw createErr;
+      }
 
 // 🔥 lưu email để resend
 localStorage.setItem("pending_verify_email", email);

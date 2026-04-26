@@ -9,7 +9,7 @@ import {
 
 test("resolveAuthErrorAction maps known auth errors", () => {
   assert.equal(resolveAuthErrorAction("auth/user-not-found"), AUTH_ACTIONS.CREATE_ACCOUNT);
-  assert.equal(resolveAuthErrorAction("auth/invalid-credential"), AUTH_ACTIONS.CREATE_ACCOUNT);
+  assert.equal(resolveAuthErrorAction("auth/invalid-credential"), AUTH_ACTIONS.WRONG_PASSWORD);
   assert.equal(resolveAuthErrorAction("auth/wrong-password"), AUTH_ACTIONS.WRONG_PASSWORD);
   assert.equal(resolveAuthErrorAction("auth/network-request-failed"), AUTH_ACTIONS.THROW);
 });

@@ -5,10 +5,10 @@ export const AUTH_ACTIONS = {
 };
 
 export function resolveAuthErrorAction(code) {
-  if (code === "auth/user-not-found" || code === "auth/invalid-credential") {
+  if (code === "auth/user-not-found") {
     return AUTH_ACTIONS.CREATE_ACCOUNT;
   }
-  if (code === "auth/wrong-password") {
+  if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
     return AUTH_ACTIONS.WRONG_PASSWORD;
   }
   return AUTH_ACTIONS.THROW;
