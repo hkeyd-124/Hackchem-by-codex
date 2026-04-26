@@ -127,9 +127,11 @@ body{
 
 </div>
 
+<script src="./sessionService.js"></script>
 <script>
-const wallet = localStorage.getItem("wallet") || "guest";
-const uid = localStorage.getItem("uid") || wallet;
+const identity = window.sessionService.getCurrentIdentity();
+const wallet = identity.wallet || "guest";
+const uid = window.sessionService.getStorageUserIdOrGuest();
 /* NAV */
 function toggle(id){
   const el = document.getElementById(id)
@@ -164,10 +166,8 @@ const totals = {
 
 /* GET % */
 function getPercent(id){
-
-  const data = JSON.parse(
-    localStorage.getItem("progress_" + id + "_" + uid)
-  );
+  const progressKey = window.sessionService.buildScopedKey("progress", id, uid);
+  const data = JSON.parse(localStorage.getItem(progressKey));
 
   if(!data) return 0;
 

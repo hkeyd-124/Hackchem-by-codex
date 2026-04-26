@@ -5,6 +5,8 @@
 <title>Lesson</title>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.10.0/dist/ethers.umd.min.js"></script>
+<script src="../sessionService.js"></script>
+<script src="../lessonProgressService.js"></script>
 <style>
 body { margin:0; font-family:Arial; }
 
@@ -160,7 +162,7 @@ iframe{ width:100%; height:100%; }
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
 <script type="module">
-import { db, userId, doc, setDoc, getDoc } from "../firebase.js";
+import { db, doc, setDoc, getDoc } from "../firebase.js";
 const CONTRACT_ADDRESS = "0x016f342fbd80C4a07AB0829b14AdfAe7b26f385B";
 
 const ABI = [
@@ -172,34 +174,60 @@ const params = new URLSearchParams(window.location.search);
 
 const lessonId = params.get("lesson") || "organic_1";
   const lessonName = localStorage.getItem("currentLessonName") || lessonId;
+const activeUserId = window.sessionService.getStorageUserId();
+
+function isPermissionDeniedError(err){
+  return err?.code === "permission-denied" || err?.code === "firestore/permission-denied";
+}
+
+async function safeGetDoc(ref){
+  try{
+    return await getDoc(ref);
+  }catch(err){
+    if(isPermissionDeniedError(err)){
+      return {
+        exists: () => false,
+        data: () => ({})
+      };
+    }
+    throw err;
+  }
+}
+
+async function safeSetDoc(ref, data, options){
+  try{
+    await setDoc(ref, data, options);
+  }catch(err){
+    if(!isPermissionDeniedError(err)) throw err;
+  }
+}
 let username = "User";
 
 async function loadUsername(){
-  const userRef = doc(db,"users",userId);
-  const snap = await getDoc(userRef);
+  const userRef = doc(db,"users",activeUserId);
+  const snap = await safeGetDoc(userRef);
 
   if(snap.exists()){
     username = snap.data().name || "User";
   }
 }
-const uid = localStorage.getItem("uid") || localStorage.getItem("wallet");
-const wallet = localStorage.getItem("wallet") || "guest";
-const progressKey = "progress_" + lessonId + "_" + uid;
-const bestKey = "best_" + lessonId + "_" + uid;
-  // 🔥 MIGRATE OLD DATA (wallet → uid)
-const oldProgressKey = "progress_" + lessonId + "_" + wallet;
-const newProgressKey = "progress_" + lessonId + "_" + uid;
-
-if(localStorage.getItem(oldProgressKey) && !localStorage.getItem(newProgressKey)){
-  localStorage.setItem(newProgressKey, localStorage.getItem(oldProgressKey));
-}
-
-const oldBestKey = "best_" + lessonId + "_" + wallet;
-const newBestKey = "best_" + lessonId + "_" + uid;
-
-if(localStorage.getItem(oldBestKey) && !localStorage.getItem(newBestKey)){
-  localStorage.setItem(newBestKey, localStorage.getItem(oldBestKey));
-}
+const identity = window.sessionService.getCurrentIdentity();
+const uid = identity.uid || identity.wallet || "guest";
+const wallet = identity.wallet || "guest";
+const lessonStorageKeys = window.lessonProgressService.buildLessonStorageKeys({
+  lessonId,
+  uid,
+  wallet,
+  sessionService: window.sessionService
+});
+const progressKey = lessonStorageKeys.progressKey;
+const bestKey = lessonStorageKeys.bestKey;
+window.lessonProgressService.migrateLegacyLessonKeys({
+  oldProgressKey: lessonStorageKeys.oldProgressKey,
+  progressKey,
+  oldBestKey: lessonStorageKeys.oldBestKey,
+  bestKey
+});
 
 /* STATE */
 let score = 150;
@@ -215,13 +243,13 @@ let tfCorrectState = {}; // 🔥 object theo từng câu
 
 /* FIREBASE */
 async function saveToCloud(){
-  if(!userId) return;
+  if(!activeUserId) return;
 
   const data = JSON.parse(localStorage.getItem(progressKey));
   if(!data) return;
 
-await setDoc(
-  doc(db, "users", userId, "lessons", lessonId),
+await safeSetDoc(
+  doc(db, "users", activeUserId, "lessons", lessonId),
   {
     ...data,
     updatedAt: Date.now()
@@ -233,25 +261,25 @@ await setDoc(
 /* 🔥 FIRST COMPLETION */
 async function saveFirstCompletion(){
 
-  if(!userId) return;
+  if(!activeUserId) return;
 
-  const ref = doc(db, "users", userId, "lessons", lessonId);
-  const snap = await getDoc(ref);
+  const ref = doc(db, "users", activeUserId, "lessons", lessonId);
+  const snap = await safeGetDoc(ref);
 
   if(snap.exists() && snap.data().firstScore){
     return;
   }
 
-  await setDoc(ref, {
+  await safeSetDoc(ref, {
     firstScore: score
   }, { merge:true });
 }
 
 /* LOAD */
 async function loadFromCloud(){
-  if(!userId) return;
+  if(!activeUserId) return;
 
-  const snap = await getDoc(doc(db,"users",userId,"lessons",lessonId));
+  const snap = await safeGetDoc(doc(db,"users",activeUserId,"lessons",lessonId));
 
   if(snap.exists()){
     localStorage.setItem(progressKey, JSON.stringify(snap.data()));
@@ -296,7 +324,7 @@ async function uploadToIPFS(file){
   });
 }
  async function createMetadata(imageCID){
-  const snap = await getDoc(doc(db,"users",userId,"lessons",lessonId));
+  const snap = await safeGetDoc(doc(db,"users",activeUserId,"lessons",lessonId));
   let finalScore = score;
   if(snap.exists() && snap.data().firstScore){
     finalScore = snap.data().firstScore;
@@ -508,7 +536,7 @@ function saveBest(){
     best = score;
     localStorage.setItem(bestKey, best);
 
-    setDoc(doc(db,"users",userId,"stats","best_"+lessonId),{
+    setDoc(doc(db,"users",activeUserId,"stats","best_"+lessonId),{
       best
     });
   }
@@ -907,7 +935,7 @@ if(correctCount === questions.length){
   document.getElementById("openCertBtn").style.display = "inline-block";
 
   // 🔥 CHECK FIREBASE → ĐÃ MINT CHƯA
-  const snap = await getDoc(doc(db,"users",userId,"lessons",lessonId));
+  const snap = await safeGetDoc(doc(db,"users",activeUserId,"lessons",lessonId));
 
   if(snap.exists() && snap.data().minted){
     const btn = document.getElementById("mintBtn");
@@ -923,15 +951,10 @@ window.showHint = showHint;
 window.goBack = goBack;
 window.resetLesson = resetLesson;
   window.mintNFT = mintNFT;
-function getRank(score){
-
-  if(score >= 420) return "gold";
-  if(score >= 360) return "silver";
-  return "bronze";
-}
+const getRank = window.lessonProgressService.getRank;
 const certificatePreview = document.getElementById("certificatePreview");
 async function renderCertificate(){
-  const snap = await getDoc(doc(db,"users",userId,"lessons",lessonId));
+  const snap = await safeGetDoc(doc(db,"users",activeUserId,"lessons",lessonId));
   let finalScore = score;
   if(snap.exists() && snap.data().firstScore){
     finalScore = snap.data().firstScore;
@@ -998,7 +1021,7 @@ if(alreadyMinted){
   return;
 }
     // 🔒 Firebase check
-    const snap = await getDoc(doc(db,"users",userId,"lessons",lessonId));
+    const snap = await safeGetDoc(doc(db,"users",activeUserId,"lessons",lessonId));
 
     if(!snap.exists() || !snap.data().firstScore){
       btn.innerText = "❌ Chưa hoàn thành bài";
@@ -1022,7 +1045,7 @@ if(alreadyMinted){
 btn.disabled = true; // 🔥 KHÓA NÚT
 document.getElementById("openCertBtn").innerText = "🏆 Xem chứng chỉ"; // 🔥 UX đẹp hơn
 
-    await setDoc(doc(db,"users",userId,"lessons",lessonId),{
+    await safeSetDoc(doc(db,"users",activeUserId,"lessons",lessonId),{
       minted: true
     }, { merge:true });
 
