@@ -163,6 +163,7 @@ iframe{ width:100%; height:100%; }
 
 <script type="module">
 import { db, doc, setDoc, getDoc } from "../firebase.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 const CONTRACT_ADDRESS = "0x016f342fbd80C4a07AB0829b14AdfAe7b26f385B";
 
 const ABI = [
@@ -174,7 +175,7 @@ const params = new URLSearchParams(window.location.search);
 
 const lessonId = params.get("lesson") || "organic_3";
   const lessonName = localStorage.getItem("currentLessonName") || lessonId;
-const activeUserId = window.sessionService.getStorageUserId();
+const activeUserId = getAuth().currentUser?.uid || window.sessionService.getStorageUserId();
 
 function isPermissionDeniedError(err){
   return err?.code === "permission-denied" || err?.code === "firestore/permission-denied";

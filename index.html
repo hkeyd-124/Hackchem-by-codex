@@ -659,7 +659,18 @@ else{
     }
   }
   if(!uid){
-    throw new Error("missing-auth-uid");
+    try{
+      uid = await createUser({ wallet });
+    }catch(createErr){
+      if(createErr?.code !== "permission-denied" && createErr?.code !== "firestore/permission-denied"){
+        throw createErr;
+      }
+      if(!auth.currentUser){
+        throw createErr;
+      }
+      uid = auth.currentUser.uid;
+      await createUser({ wallet, uid });
+    }
   }
 
   await createUser({ wallet, uid });

@@ -1099,8 +1099,42 @@ options.forEach(o => {
 </script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, collection, getDocs } 
 from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const sessionIdentity = window.sessionService.getCurrentIdentity();
+const sessionUid = sessionIdentity.uid || null;
+const sessionWallet = sessionIdentity.wallet || null;
+let currentUserDocId = window.sessionService.getStorageUserId();
+
+function isPermissionDeniedError(err){
+  return err?.code === "permission-denied" || err?.code === "firestore/permission-denied";
+}
+
+async function getUserSnapshotWithFallback(){
+  const candidates = [authUid, currentUserDocId, sessionUid, sessionWallet].filter(Boolean);
+  const tried = new Set();
+
+  for(const candidate of candidates){
+    if(tried.has(candidate)) continue;
+    tried.add(candidate);
+    try{
+      const snap = await getDoc(doc(db, "users", candidate));
+      if(snap.exists()){
+        currentUserDocId = candidate;
+        window.sessionService.setCurrentUid(candidate);
+        return { snap, userId: candidate };
+      }
+    }catch(err){
+      if(!isPermissionDeniedError(err)){
+        throw err;
+      }
+    }
+  }
+
+  return { snap: null, userId: currentUserDocId || sessionUid || sessionWallet || null };
+}
 
 const sessionIdentity = window.sessionService.getCurrentIdentity();
 const sessionUid = sessionIdentity.uid || null;
@@ -1239,6 +1273,8 @@ apiKey:"AIzaSyCO3BvrQ0GAmIebCwueVd88Do1YGk_iYJo",
 projectId:"hackchem-90922"
 });
 const db = getFirestore(app);
+const auth = getAuth(app);
+const authUid = auth.currentUser?.uid || null;
   
 window.loadLessons = function(){
 
@@ -1469,7 +1505,7 @@ if(emailBtn){
 }
  
 window.handleCheckin = async () => {
-  const uid = currentUserDocId || window.sessionService.getStorageUserId()
+  const uid = authUid || currentUserDocId || window.sessionService.getStorageUserId()
   if(!uid){
     alert("Phiên đăng nhập không hợp lệ, vui lòng đăng nhập lại!");
     return;
@@ -1579,7 +1615,7 @@ const ref = doc(db,"users",uid)
   });
 
   const wallet = accounts[0];
-  const uid = currentUserDocId || window.sessionService.getUid();
+  const uid = authUid || currentUserDocId || window.sessionService.getUid();
 
   if(!uid){
     alert("Bạn cần đăng nhập trước!");
@@ -1637,7 +1673,7 @@ window.linkEmail = async function(){
     return;
   }
 
-  const uid = currentUserDocId || window.sessionService.getUid();
+  const uid = authUid || currentUserDocId || window.sessionService.getUid();
 
   if(!uid){
     alert("Bạn cần đăng nhập trước!");
