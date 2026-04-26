@@ -562,6 +562,7 @@ h1 {
 <!-- FIREBASE + JS GIỮ NGUYÊN -->
 <!-- DÁN NGUYÊN SCRIPT CŨ CỦA BẠN Ở ĐÂY -->
 <!-- FIREBASE -->
+<script src="./sessionService.js"></script>
 <script type="module">
  import { 
   getAuth, 
@@ -624,7 +625,7 @@ const wallet = walletAddress;
 
 // 🔥 NEW: lấy hoặc tạo UID
 // 🔥 LẤY UID HIỆN TẠI (nếu có)
-let uid = localStorage.getItem("uid");
+let uid = window.sessionService.getUid();
 
 // ============================
 // 🔥 CASE 1: đã login (email trước)
@@ -696,13 +697,13 @@ else{
     });
 
     // 4. SAVE
-    const oldWallet = localStorage.getItem("wallet");
+    const oldWallet = window.sessionService.getWallet();
 
 if(oldWallet && oldWallet !== walletAddress){
-  localStorage.removeItem("uid"); // 🔥 reset toàn bộ
+  window.sessionService.clearUid(); // 🔥 reset toàn bộ
 }
-    localStorage.setItem("wallet", walletAddress);
-localStorage.setItem("uid", uid);
+    window.sessionService.setCurrentWallet(walletAddress);
+window.sessionService.setCurrentUid(uid);
 
     // 5. FIREBASE
     await window.saveUser(uid);
@@ -722,12 +723,43 @@ localStorage.setItem("uid", uid);
 }
 
 // CHECK FIRST
+function isPermissionDeniedError(err) {
+  return err?.code === "permission-denied" || err?.code === "firestore/permission-denied";
+}
+
+function getFallbackUid() {
+  return auth?.currentUser?.uid || null;
+}
+
+async function getUserSnapshotByUid(uid) {
+  const ref = window.doc(window.db, "users", uid);
+  return window.getDoc(ref);
+}
+
 async function checkFirstTime() {
 
-  const uid = localStorage.getItem("uid");
+  const sessionUid = window.sessionService.getUid();
+  const fallbackUid = getFallbackUid();
+  let snapshot = null;
+  let effectiveUid = sessionUid || fallbackUid;
 
-  const ref = window.doc(window.db, "users", uid);
-  const snapshot = await window.getDoc(ref);
+  if (!effectiveUid) {
+    return false;
+  }
+
+  try {
+    snapshot = await getUserSnapshotByUid(effectiveUid);
+  } catch (err) {
+    if (!isPermissionDeniedError(err)) {
+      throw err;
+    }
+    if (!fallbackUid || fallbackUid === effectiveUid) {
+      throw err;
+    }
+    effectiveUid = fallbackUid;
+    window.sessionService.setCurrentUid(effectiveUid);
+    snapshot = await getUserSnapshotByUid(effectiveUid);
+  }
 
   if (snapshot.exists()) {
     const data = snapshot.data();
@@ -752,12 +784,34 @@ window.saveName = async function() {
     return;
   }
 
-  const uid = localStorage.getItem("uid");
-const ref = window.doc(window.db, "users", uid);
+  const sessionUid = window.sessionService.getUid();
+  const fallbackUid = getFallbackUid();
+  let effectiveUid = sessionUid || fallbackUid;
 
-  await window.updateDoc(ref, {
-    name: name
-  });
+  if (!effectiveUid) {
+    alert("Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại!");
+    return;
+  }
+
+  try {
+    const ref = window.doc(window.db, "users", effectiveUid);
+    await window.updateDoc(ref, {
+      name: name
+    });
+  } catch (err) {
+    if (!isPermissionDeniedError(err)) {
+      throw err;
+    }
+    if (!fallbackUid || fallbackUid === effectiveUid) {
+      throw err;
+    }
+    effectiveUid = fallbackUid;
+    window.sessionService.setCurrentUid(effectiveUid);
+    const ref = window.doc(window.db, "users", effectiveUid);
+    await window.updateDoc(ref, {
+      name: name
+    });
+  }
 
   document.getElementById("nameModal").style.display = "none";
 
@@ -797,7 +851,7 @@ window.loginEmail = async function(){
 
     let uid = result;
 
-    localStorage.setItem("uid", uid);
+    window.sessionService.setCurrentUid(uid);
 
     const isFirst = await checkFirstTime();
 
