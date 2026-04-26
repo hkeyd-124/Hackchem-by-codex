@@ -630,7 +630,6 @@ const wallet = walletAddress;
 // 🔥 NEW: lấy hoặc tạo UID
 // 🔥 LẤY UID HIỆN TẠI (nếu có)
 let uid = window.sessionService.getUid();
-const authUid = auth.currentUser?.uid || null;
 
 // ============================
 // 🔥 CASE 1: đã login (email trước)
@@ -652,7 +651,7 @@ if(uid){
 // 🔥 CASE 2: chưa login gì
 // ============================
 else{
-  uid = authUid;
+  uid = await getUserByWallet(wallet);
   if(!uid){
     throw new Error("missing-auth-uid");
   }
