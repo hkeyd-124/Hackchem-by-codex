@@ -3,6 +3,7 @@
 import { db } from "./firebase.js";
 import { doc, getDoc, setDoc } 
 from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { normalizeEmail, normalizeWallet, buildDefaultUser } from "./userSchema.js";
 
 // 🔥 tạo UID chuẩn
 function generateUID(){
@@ -13,6 +14,8 @@ function generateUID(){
 // 🔍 TÌM USER THEO WALLET
 // ============================
 export async function getUserByWallet(wallet){
+  wallet = normalizeWallet(wallet);
+  if (!wallet) return null;
 
   const ref = doc(db, "wallet_index", wallet);
   const snap = await getDoc(ref);
@@ -26,7 +29,8 @@ export async function getUserByWallet(wallet){
 // 🔍 TÌM USER THEO EMAIL
 // ============================
 export async function getUserByEmail(email){
-email = email.toLowerCase();
+email = normalizeEmail(email);
+  if (!email) return null;
   const ref = doc(db, "email_index", email);
   const snap = await getDoc(ref);
 
@@ -38,35 +42,13 @@ email = email.toLowerCase();
 // ============================
 // 🆕 TẠO USER MỚI
 // ============================
-export async function createUser({wallet=null, email=null}){
-if(email) email = email.toLowerCase();
-  const uid = generateUID();
+export async function createUser({wallet=null, email=null, uid: providedUid=null}){
+wallet = normalizeWallet(wallet);
+  email = normalizeEmail(email);
+  const uid = providedUid || generateUID();
 
   // 🔥 TẠO USER
-  await setDoc(doc(db, "users", uid), {
-    uid,
-    wallet,
-    email,
-
-    name: "",
-    avatar: "",
-    cover: "",
-
-    points: 0,
-    streak: 1,
-    lastCheckin: "",
-
-    createdAt: new Date().toISOString(),
-
-    providers: {
-      wallet: !!wallet,
-      email: !!email
-    },
-    system: {
-    status: "active", // active | banned
-    role: "user"
-  }
-  });
+  await setDoc(doc(db, "users", uid), buildDefaultUser({ uid, wallet, email }), { merge: true });
 
   // 🔥 TẠO INDEX WALLET
   if(wallet){
