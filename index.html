@@ -651,7 +651,13 @@ if(uid){
 // 🔥 CASE 2: chưa login gì
 // ============================
 else{
-  uid = await getUserByWallet(wallet);
+  try{
+    uid = await getUserByWallet(wallet);
+  }catch(walletLookupErr){
+    if(walletLookupErr?.code !== "permission-denied" && walletLookupErr?.code !== "firestore/permission-denied"){
+      throw walletLookupErr;
+    }
+  }
   if(!uid){
     throw new Error("missing-auth-uid");
   }
