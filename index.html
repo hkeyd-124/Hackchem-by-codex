@@ -673,6 +673,8 @@ else{
     }
   }
 
+  await createUser({ wallet, uid });
+
 }
     // 2. CHECK NETWORK (Sepolia)
     let chainId = await ethereum.request({
