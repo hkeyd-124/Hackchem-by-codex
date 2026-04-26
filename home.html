@@ -1102,6 +1102,39 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getFirestore, doc, getDoc, setDoc, collection, getDocs } 
 from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+const identity = window.sessionService.getCurrentIdentity();
+const sessionUid = identity.uid || null;
+const sessionWallet = identity.wallet || null;
+let currentUserDocId = window.sessionService.getStorageUserId();
+
+function isPermissionDeniedError(err){
+  return err?.code === "permission-denied" || err?.code === "firestore/permission-denied";
+}
+
+async function getUserSnapshotWithFallback(){
+  const candidates = [currentUserDocId, sessionUid, sessionWallet].filter(Boolean);
+  const tried = new Set();
+
+  for(const candidate of candidates){
+    if(tried.has(candidate)) continue;
+    tried.add(candidate);
+    try{
+      const snap = await getDoc(doc(db, "users", candidate));
+      if(snap.exists()){
+        currentUserDocId = candidate;
+        window.sessionService.setCurrentUid(candidate);
+        return { snap, userId: candidate };
+      }
+    }catch(err){
+      if(!isPermissionDeniedError(err)){
+        throw err;
+      }
+    }
+  }
+
+  return { snap: null, userId: currentUserDocId || sessionUid || sessionWallet || null };
+}
+
 const app = initializeApp({
 apiKey:"AIzaSyCO3BvrQ0GAmIebCwueVd88Do1YGk_iYJo",
 projectId:"hackchem-90922"
@@ -1180,7 +1213,7 @@ window.loadLeaderboard = async function(){
     const div=document.createElement("div")
     div.className="lb-row"
 
-    if(u.id===uid || u.id===walletAddress){
+    if(u.id===sessionUid || u.id===sessionWallet){
       div.style.border="2px solid gold"
     }
 
@@ -1198,18 +1231,25 @@ window.loadLeaderboard = async function(){
 }
 
 async function loadUser(){
-const identity = window.sessionService.getCurrentIdentity()
-const walletAddress = identity.wallet
-const uid = identity.uid
+const walletAddress = sessionWallet
+const uid = sessionUid
 
-const userId = window.sessionService.getStorageUserId();
+const userId = currentUserDocId || sessionUid || sessionWallet;
 
 if(!userId){
   window.location.href="index.html";
   return;
 }
-let ref = doc(db,"users",userId)
-let snap = await getDoc(ref)
+const { snap, userId: resolvedUserId } = await getUserSnapshotWithFallback();
+
+if(!snap){
+  document.getElementById("heroName").innerText = "User";
+  walletBox.innerText = walletAddress || "No wallet";
+  profileName.innerText = "User";
+  pointValue.innerText = "0";
+  return;
+}
+
 if(snap.exists()){
   const data = snap.data();
 
@@ -1220,11 +1260,6 @@ if(snap.exists()){
     window.location.href = "index.html";
     return;
   }
-}
-if(!snap.exists()){
-  // 🔥 fallback user cũ
-  ref = doc(db,"users",walletAddress)
-  snap = await getDoc(ref)
 }
 if(snap.exists()){
 const data=snap.data()
@@ -1259,7 +1294,7 @@ let totalCorrect = 0
 
 lessons.forEach(id => {
 
-  const progressKey = window.sessionService.buildScopedKey("progress", id, uid)
+  const progressKey = window.sessionService.buildScopedKey("progress", id, resolvedUserId || uid)
   const data = JSON.parse(localStorage.getItem(progressKey))
 
   const total = totals[id]
@@ -1281,7 +1316,7 @@ document.getElementById("progressPercent").innerText = percent + "%"
 // ===== STREAK =====
 document.getElementById("streak").innerText = data.streak || 1
   document.getElementById("heroName").innerText = data.name || "User"
-walletBox.innerText = data.name || walletAddress
+walletBox.innerText = data.wallet || walletAddress || "No wallet"
 profileName.innerText = data.name || "User"
 if(data.avatar) avatarImg.src=data.avatar
 if(data.cover) coverImg.src=data.cover
@@ -1335,7 +1370,11 @@ if(emailBtn){
 }
  
 window.handleCheckin = async () => {
-  const uid = window.sessionService.getStorageUserId()
+  const uid = currentUserDocId || window.sessionService.getStorageUserId()
+  if(!uid){
+    alert("Phiên đăng nhập không hợp lệ, vui lòng đăng nhập lại!");
+    return;
+  }
   const ref = doc(db,"users",uid)
   const snap = await getDoc(ref)
 
@@ -1441,7 +1480,7 @@ const ref = doc(db,"users",uid)
   });
 
   const wallet = accounts[0];
-  const uid = window.sessionService.getUid();
+  const uid = currentUserDocId || window.sessionService.getUid();
 
   if(!uid){
     alert("Bạn cần đăng nhập trước!");
@@ -1499,7 +1538,7 @@ window.linkEmail = async function(){
     return;
   }
 
-  const uid = window.sessionService.getUid();
+  const uid = currentUserDocId || window.sessionService.getUid();
 
   if(!uid){
     alert("Bạn cần đăng nhập trước!");
