@@ -1099,9 +1099,42 @@ options.forEach(o => {
 </script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, collection, getDocs } 
 from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const sessionIdentity = window.sessionService.getCurrentIdentity();
+const sessionUid = sessionIdentity.uid || null;
+const sessionWallet = sessionIdentity.wallet || null;
+let currentUserDocId = window.sessionService.getStorageUserId();
+
+function isPermissionDeniedError(err){
+  return err?.code === "permission-denied" || err?.code === "firestore/permission-denied";
+}
+
+async function getUserSnapshotWithFallback(){
+  const candidates = [getAuthUid(), currentUserDocId, sessionUid, sessionWallet].filter(Boolean);
+  const tried = new Set();
+
+  for(const candidate of candidates){
+    if(tried.has(candidate)) continue;
+    tried.add(candidate);
+    try{
+      const snap = await getDoc(doc(db, "users", candidate));
+      if(snap.exists()){
+        currentUserDocId = candidate;
+        window.sessionService.setCurrentUid(candidate);
+        return { snap, userId: candidate };
+      }
+    }catch(err){
+      if(!isPermissionDeniedError(err)){
+        throw err;
+      }
+    }
+  }
+
+  return { snap: null, userId: currentUserDocId || sessionUid || sessionWallet || null };
+}
 
 const sessionIdentity = window.sessionService.getCurrentIdentity();
 const sessionUid = sessionIdentity.uid || null;
@@ -1587,6 +1620,16 @@ window.addEventListener("DOMContentLoaded", loadUser)
 onAuthStateChanged(auth, () => {
   loadUser();
 });
+
+window.logout = async function(){
+  try{
+    await signOut(auth);
+  }catch(err){
+    console.error("signOut failed", err);
+  }
+  localStorage.clear();
+  location.href = "index.html";
+}
   let uploadType="avatar"
 
 window.uploadAvatar=()=>{

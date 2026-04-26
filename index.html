@@ -627,15 +627,33 @@ showLoading();
     walletAddress = accounts[0];
 const wallet = walletAddress;
 
-// 🔥 NEW: lấy hoặc tạo UID
-// 🔥 LẤY UID HIỆN TẠI (nếu có)
+// Resolve wallet owner trước để tránh ghi đè mapping sai user
 let uid = window.sessionService.getUid();
+let walletOwnerUid = null;
 
-// ============================
-// 🔥 CASE 1: đã login (email trước)
-// ============================
-if(uid){
+try{
+  walletOwnerUid = await getUserByWallet(wallet);
+}catch(walletLookupErr){
+  if(walletLookupErr?.code !== "permission-denied" && walletLookupErr?.code !== "firestore/permission-denied"){
+    throw walletLookupErr;
+  }
+}
 
+// Nếu wallet đã có owner khác với uid hiện tại -> luôn ưu tiên owner của wallet
+if(walletOwnerUid && uid && walletOwnerUid !== uid){
+  uid = walletOwnerUid;
+}
+
+// Nếu chưa có uid session thì dùng owner theo wallet (nếu có)
+if(!uid && walletOwnerUid){
+  uid = walletOwnerUid;
+}
+
+// Chưa có owner thì tạo mới và gán wallet -> uid mới
+if(!uid){
+  uid = await createUser({ wallet });
+}else if(!walletOwnerUid){
+  // Có uid nhưng wallet chưa được map -> link wallet vào uid này
   await setDoc(doc(db, "users", uid), {
     wallet: wallet,
     "providers.wallet": true
@@ -644,37 +662,6 @@ if(uid){
   await setDoc(doc(db, "wallet_index", wallet), {
     uid: uid
   });
-
-}
-
-// ============================
-// 🔥 CASE 2: chưa login gì
-// ============================
-else{
-  try{
-    uid = await getUserByWallet(wallet);
-  }catch(walletLookupErr){
-    if(walletLookupErr?.code !== "permission-denied" && walletLookupErr?.code !== "firestore/permission-denied"){
-      throw walletLookupErr;
-    }
-  }
-  if(!uid){
-    try{
-      uid = await createUser({ wallet });
-    }catch(createErr){
-      if(createErr?.code !== "permission-denied" && createErr?.code !== "firestore/permission-denied"){
-        throw createErr;
-      }
-      if(!auth.currentUser){
-        throw createErr;
-      }
-      uid = auth.currentUser.uid;
-      await createUser({ wallet, uid });
-    }
-  }
-
-  await createUser({ wallet, uid });
-
 }
     // 2. CHECK NETWORK (Sepolia)
     let chainId = await ethereum.request({
