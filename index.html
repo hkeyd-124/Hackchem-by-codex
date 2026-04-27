@@ -651,7 +651,11 @@ if(!uid && walletOwnerUid){
 
 // Chưa có owner thì tạo mới và gán wallet -> uid mới
 if(!uid){
-  uid = await createUser({ wallet });
+  if(!auth.currentUser){
+    throw new Error("missing-auth-user");
+  }
+  uid = auth.currentUser.uid;
+  await createUser({ wallet, uid });
 }else if(!walletOwnerUid){
   // Có uid nhưng wallet chưa được map -> link wallet vào uid này
   await setDoc(doc(db, "users", uid), {
